@@ -11,7 +11,7 @@
 
 class GSeedRunSeed_A {
 public:
-    explicit GSeedRunSeed_A(bool pUseNonces = true);
+    explicit GSeedRunSeed_A(bool pUseNonces = true, bool pEmitNoncePrologue = true);
     ~GSeedRunSeed_A();
 
     bool                                    Plan(std::string *pErrorMessage);
@@ -22,11 +22,12 @@ private:
 
     GSeedRunStage                           mStage;
     bool                                    mUseNonces;
+    bool                                    mEmitNoncePrologue;
 };
 
 class GSeedRunSeed_B {
 public:
-    explicit GSeedRunSeed_B(bool pUseNonces = false);
+    explicit GSeedRunSeed_B(bool pUseNonces = true, bool pEmitNoncePrologue = true);
     ~GSeedRunSeed_B();
 
     bool                                    Plan(std::string *pErrorMessage);
@@ -37,11 +38,12 @@ private:
 
     GSeedRunStage                           mStage;
     bool                                    mUseNonces;
+    bool                                    mEmitNoncePrologue;
 };
 
 class GSeedRunSeed_C {
 public:
-    explicit GSeedRunSeed_C(bool pUseNonces = false);
+    explicit GSeedRunSeed_C(bool pUseNonces = true, bool pEmitNoncePrologue = true);
     ~GSeedRunSeed_C();
 
     bool                                    Plan(std::string *pErrorMessage);
@@ -52,11 +54,12 @@ private:
 
     GSeedRunStage                           mStage;
     bool                                    mUseNonces;
+    bool                                    mEmitNoncePrologue;
 };
 
 class GSeedRunSeed_D {
 public:
-    explicit GSeedRunSeed_D(bool pUseNonces = false);
+    explicit GSeedRunSeed_D(bool pUseNonces = true, bool pEmitNoncePrologue = true);
     ~GSeedRunSeed_D();
 
     bool                                    Plan(std::string *pErrorMessage);
@@ -67,6 +70,7 @@ private:
 
     GSeedRunStage                           mStage;
     bool                                    mUseNonces;
+    bool                                    mEmitNoncePrologue;
 };
 
 #endif /* GSeedRunSeed_hpp */

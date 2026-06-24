@@ -4,6 +4,7 @@
 //
 
 #include "GSeedRunSeed.hpp"
+#include "Random.hpp"
 
 #include <array>
 #include <sstream>
@@ -11,14 +12,20 @@
 namespace {
 
 const std::array<const char *, 8> kNonceVariableNames = {
-    "aNonceByteA",
-    "aNonceByteB",
-    "aNonceByteC",
-    "aNonceByteD",
-    "aNonceByteE",
-    "aNonceByteF",
-    "aNonceByteG",
-    "aNonceByteH",
+    "aNonceWordA",
+    "aNonceWordB",
+    "aNonceWordC",
+    "aNonceWordD",
+    "aNonceWordE",
+    "aNonceWordF",
+    "aNonceWordG",
+    "aNonceWordH",
+};
+
+const std::array<const char *, 3> kNonceDiffuseNames = {
+    "DiffuseA",
+    "DiffuseB",
+    "DiffuseC",
 };
 
 int PhaseIndex(const TwistDomain pDomain) {
@@ -46,17 +53,36 @@ std::string SeedLoopName(const TwistDomain pDomain) {
     return aResult;
 }
 
-std::string NonceLine(const GSymbol &pNonceSymbol,
-                      const int pIndex) {
+std::string UInt64Literal(const std::uint64_t pValue) {
+    std::ostringstream aStream;
+    aStream << "0x" << std::uppercase << std::hex << pValue << "ULL";
+    return aStream.str();
+}
+
+const char *RandomNonceDiffuseName() {
+    return kNonceDiffuseNames[static_cast<std::size_t>(Random::Get(static_cast<int>(kNonceDiffuseNames.size())))];
+}
+
+std::string NonceDeclareLine(const GSymbol &pNonceSymbol,
+                             const int pIndex) {
+    (void)pIndex;
+    const std::uint64_t aMultiplyWord = Random::Get64HighOdd();
+    const std::uint64_t aAddWord = Random::Get64High();
+    const char *aDiffuseName = RandomNonceDiffuseName();
+
     std::ostringstream aLine;
-    aLine << "[[maybe_unused]] std::uint64_t " << pNonceSymbol.mName
-          << " = ((pNonce >> " << (pIndex * 8) << "U) & 0xFFULL);";
+    aLine << "std::uint64_t " << pNonceSymbol.mName << " = TwistMix64::"
+          << aDiffuseName
+          << "(pNonce * "
+          << UInt64Literal(aMultiplyWord)
+          << " + "
+          << UInt64Literal(aAddWord) << ");";
     return aLine.str();
 }
 
 void AddSeedNoncePrologue(TwistProgramBranch &pBranch) {
     for (int i = 0; i < 8; ++i) {
-        pBranch.AddLine(NonceLine(GSymbol::Var(kNonceVariableNames[static_cast<std::size_t>(i)]), i));
+        pBranch.AddLine(NonceDeclareLine(GSymbol::Var(kNonceVariableNames[static_cast<std::size_t>(i)]), i));
     }
 }
 
@@ -149,8 +175,9 @@ GSeedRunStageConfig MakeSeed_BConfig(const bool pUseNonces) {
     GSeedRunStageConfig aConfig = BaseConfig("GSeedRunSeed_B",
                                              TwistDomain::kPhaseB,
                                              pUseNonces,
-                                             GAXSFormat::kN5,
+                                             GAXSFormat::kN11,
                                              {4, 4, 4, 4});
+    
     aConfig.mSlices = {
         {{Slot::kExpansionLaneD,
           Slot::kExpansionLaneC,
@@ -189,8 +216,9 @@ GSeedRunStageConfig MakeSeed_CConfig(const bool pUseNonces) {
     GSeedRunStageConfig aConfig = BaseConfig("GSeedRunSeed_C",
                                              TwistDomain::kPhaseC,
                                              pUseNonces,
-                                             GAXSFormat::kN11,
+                                             GAXSFormat::kN9,
                                              {4, 4, 4, 4});
+    
     aConfig.mSlices = {
         {{Slot::kOperationLaneD,
           Slot::kOperationLaneC,
@@ -229,7 +257,7 @@ GSeedRunStageConfig MakeSeed_DConfig(const bool pUseNonces) {
     GSeedRunStageConfig aConfig = BaseConfig("GSeedRunSeed_D",
                                              TwistDomain::kPhaseD,
                                              pUseNonces,
-                                             GAXSFormat::kN9,
+                                             GAXSFormat::kN7,
                                              {4, 4, 4, 4});
     aConfig.mSlices = {
         {{Slot::kExpansionLaneD,
@@ -238,21 +266,21 @@ GSeedRunStageConfig MakeSeed_DConfig(const bool pUseNonces) {
           Slot::kExpansionLaneA},
          Slot::kWorkLaneA,
          false},
-
+        
         {{Slot::kWorkLaneA,
           Slot::kExpansionLaneD,
           Slot::kExpansionLaneC,
           Slot::kExpansionLaneB},
          Slot::kWorkLaneB,
          true},
-
+        
         {{Slot::kWorkLaneB,
           Slot::kWorkLaneA,
           Slot::kExpansionLaneD,
           Slot::kExpansionLaneC},
          Slot::kWorkLaneC,
          false},
-
+        
         {{Slot::kWorkLaneC,
           Slot::kWorkLaneB,
           Slot::kWorkLaneA,
@@ -265,9 +293,11 @@ GSeedRunStageConfig MakeSeed_DConfig(const bool pUseNonces) {
 
 } // namespace
 
-GSeedRunSeed_A::GSeedRunSeed_A(const bool pUseNonces)
+GSeedRunSeed_A::GSeedRunSeed_A(const bool pUseNonces,
+                               const bool pEmitNoncePrologue)
 : mStage(MakeSeed_AConfig(pUseNonces)),
-  mUseNonces(pUseNonces) {
+  mUseNonces(pUseNonces),
+  mEmitNoncePrologue(pEmitNoncePrologue) {
 }
 
 GSeedRunSeed_A::~GSeedRunSeed_A() {
@@ -283,15 +313,17 @@ bool GSeedRunSeed_A::Plan(std::string *pErrorMessage) {
 
 bool GSeedRunSeed_A::Build(TwistProgramBranch &pBranch,
                            std::string *pErrorMessage) {
-    if (mUseNonces) {
+    if (mUseNonces && mEmitNoncePrologue) {
         AddSeedNoncePrologue(pBranch);
     }
     return mStage.Build(pBranch, pErrorMessage);
 }
 
-GSeedRunSeed_B::GSeedRunSeed_B(const bool pUseNonces)
+GSeedRunSeed_B::GSeedRunSeed_B(const bool pUseNonces,
+                               const bool pEmitNoncePrologue)
 : mStage(MakeSeed_BConfig(pUseNonces)),
-  mUseNonces(pUseNonces) {
+  mUseNonces(pUseNonces),
+  mEmitNoncePrologue(pEmitNoncePrologue) {
 }
 
 GSeedRunSeed_B::~GSeedRunSeed_B() {
@@ -307,15 +339,17 @@ bool GSeedRunSeed_B::Plan(std::string *pErrorMessage) {
 
 bool GSeedRunSeed_B::Build(TwistProgramBranch &pBranch,
                            std::string *pErrorMessage) {
-    if (mUseNonces) {
+    if (mUseNonces && mEmitNoncePrologue) {
         AddSeedNoncePrologue(pBranch);
     }
     return mStage.Build(pBranch, pErrorMessage);
 }
 
-GSeedRunSeed_C::GSeedRunSeed_C(const bool pUseNonces)
+GSeedRunSeed_C::GSeedRunSeed_C(const bool pUseNonces,
+                               const bool pEmitNoncePrologue)
 : mStage(MakeSeed_CConfig(pUseNonces)),
-  mUseNonces(pUseNonces) {
+  mUseNonces(pUseNonces),
+  mEmitNoncePrologue(pEmitNoncePrologue) {
 }
 
 GSeedRunSeed_C::~GSeedRunSeed_C() {
@@ -331,15 +365,17 @@ bool GSeedRunSeed_C::Plan(std::string *pErrorMessage) {
 
 bool GSeedRunSeed_C::Build(TwistProgramBranch &pBranch,
                            std::string *pErrorMessage) {
-    if (mUseNonces) {
+    if (mUseNonces && mEmitNoncePrologue) {
         AddSeedNoncePrologue(pBranch);
     }
     return mStage.Build(pBranch, pErrorMessage);
 }
 
-GSeedRunSeed_D::GSeedRunSeed_D(const bool pUseNonces)
+GSeedRunSeed_D::GSeedRunSeed_D(const bool pUseNonces,
+                               const bool pEmitNoncePrologue)
 : mStage(MakeSeed_DConfig(pUseNonces)),
-  mUseNonces(pUseNonces) {
+  mUseNonces(pUseNonces),
+  mEmitNoncePrologue(pEmitNoncePrologue) {
 }
 
 GSeedRunSeed_D::~GSeedRunSeed_D() {
@@ -355,7 +391,7 @@ bool GSeedRunSeed_D::Plan(std::string *pErrorMessage) {
 
 bool GSeedRunSeed_D::Build(TwistProgramBranch &pBranch,
                            std::string *pErrorMessage) {
-    if (mUseNonces) {
+    if (mUseNonces && mEmitNoncePrologue) {
         AddSeedNoncePrologue(pBranch);
     }
     return mStage.Build(pBranch, pErrorMessage);

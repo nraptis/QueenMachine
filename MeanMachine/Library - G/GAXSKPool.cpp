@@ -137,17 +137,13 @@ bool GAXSKPool::FinalizeCounts(bool pIgnoreNonces,
     } else if (mSourceCount == 2) {
         mSourcesIngress.push_back(GAXSKSourceKind::kSourceA);
         mSourcesIngress.push_back(GAXSKSourceKind::kSourceB);
-        mSourcesCross.push_back(GAXSKSourceKind::kSourceB);
         mSourcesCross.push_back(GAXSKSourceKind::kSourceA);
+        mSourcesCross.push_back(GAXSKSourceKind::kSourceB);
     } else if (mSourceCount == 3) {
         mSourcesIngress.push_back(GAXSKSourceKind::kSourceA);
         mSourcesIngress.push_back(GAXSKSourceKind::kSourceB);
         mSourcesCross.push_back(GAXSKSourceKind::kSourceC);
-        if (Random::Bool()) {
-            mSourcesCross.push_back(GAXSKSourceKind::kSourceB);
-        } else {
-            mSourcesCross.push_back(GAXSKSourceKind::kSourceA);
-        }
+        mSourcesCross.push_back(GAXSKSourceKind::kSourceA);
     } else if (mSourceCount == 4) {
         mSourcesIngress.push_back(GAXSKSourceKind::kSourceA);
         mSourcesIngress.push_back(GAXSKSourceKind::kSourceB);

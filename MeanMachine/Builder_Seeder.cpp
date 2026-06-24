@@ -361,13 +361,13 @@ bool Builder_Seeder::Build_PostKDF(GTwistExpander *pExpander,
     aOperationLanes.push_back(BufSymbol(TwistWorkSpaceSlot::kOperationLaneD));
 
     AddSeedDomainWordLines(pExpander->mSeed, TwistDomain::kPhaseA, true);
-    GSeedRunSeed_A aRunnerSeedA(true);
+    GSeedRunSeed_A aRunnerSeedA(true, false);
     if (!BuildSeedStage(pExpander->mSeed, aRunnerSeedA, "GSeedRunSeed_A", pErrorMessage)) {
         return false;
     }
     
     AddSeedDomainWordLines(pExpander->mSeed, TwistDomain::kPhaseB, false);
-    GSeedRunSeed_B aRunnerSeedB(false);
+    GSeedRunSeed_B aRunnerSeedB(true, false);
     if (!BuildSeedStage(pExpander->mSeed, aRunnerSeedB, "GSeedRunSeed_B", pErrorMessage)) {
         return false;
     }
@@ -395,7 +395,7 @@ bool Builder_Seeder::Build_PostKDF(GTwistExpander *pExpander,
     
     
     AddSeedDomainWordLines(pExpander->mSeed, TwistDomain::kPhaseC, false);
-    GSeedRunSeed_C aRunnerSeedC(false);
+    GSeedRunSeed_C aRunnerSeedC(true, false);
     if (!BuildSeedStage(pExpander->mSeed, aRunnerSeedC, "GSeedRunSeed_C", pErrorMessage)) {
         return false;
     }
@@ -429,7 +429,6 @@ bool Builder_Seeder::Build_PostKDF(GTwistExpander *pExpander,
         
         
         GBatch aBatchDiffusion;
-        aBatchDiffusion.AddComment(std::string("seedur") + "-matrix-diffusion: yeah");
         
         if (!GRunMatrixDiffusion::Bake(aDiffusionA, &aBatchDiffusion, pErrorMessage)) {
             if (pErrorMessage != nullptr) {
@@ -476,7 +475,7 @@ bool Builder_Seeder::Build_PostKDF(GTwistExpander *pExpander,
     
     
     AddSeedDomainWordLines(pExpander->mSeed, TwistDomain::kPhaseD, false);
-    GSeedRunSeed_D aRunnerSeedD(false);
+    GSeedRunSeed_D aRunnerSeedD(true, false);
     if (!BuildSeedStage(pExpander->mSeed, aRunnerSeedD, "GSeedRunSeed_D", pErrorMessage)) {
         return false;
     }

@@ -10,6 +10,7 @@
 
 #include <array>
 #include <cstdint>
+#include <vector>
 #include "Random.hpp"
 
 #define G_HOT_PACK_COUNT 6

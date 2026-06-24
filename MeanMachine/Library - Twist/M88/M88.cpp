@@ -45,7 +45,7 @@ void M88::Dispatch(std::uint8_t *pOperationData,
     
     std::uint8_t *aSource = pSource + pSourceIndex;
     std::uint8_t *aDestination = pDestination + pDestinationIndex;
-    memcpy(pDestination, aSource, 64U);
+    memcpy(aDestination, aSource, 64U);
     
 }
 
@@ -63,7 +63,6 @@ void M88::Dispatch(std::uint8_t *pOperationData,
     
     std::uint8_t *aSource = pSource + pSourceIndex;
     std::uint8_t *aDestination = pDestination + pDestinationIndex;
-    memcpy(pDestination, aSource, 64U);
+    memcpy(aDestination, aSource, 64U);
     
 }
-

@@ -8,7 +8,6 @@
 #include "Random.hpp"
 
 #include <array>
-#include <sstream>
 
 namespace {
 
@@ -27,25 +26,6 @@ const std::array<TwistVariable, 13> kInitialRandomVariables = {
     TwistVariable::kWandererJ,
     TwistVariable::kWandererK,
 };
-
-const std::array<const char *, 8> kNonceVariableNames = {
-    "aNonceByteA",
-    "aNonceByteB",
-    "aNonceByteC",
-    "aNonceByteD",
-    "aNonceByteE",
-    "aNonceByteF",
-    "aNonceByteG",
-    "aNonceByteH",
-};
-
-std::string NonceLine(const GSymbol &pNonceSymbol,
-                      const int pIndex) {
-    std::ostringstream aLine;
-    aLine << "[[maybe_unused]] std::uint64_t " << pNonceSymbol.mName
-          << " = ((pNonce >> " << (pIndex * 8) << "U) & 0xFFULL);";
-    return aLine.str();
-}
 
 std::vector<TwistWorkSpaceSlot> ParamOrbiterAssignSalts() {
     using Slot = TwistWorkSpaceSlot;
@@ -109,10 +89,6 @@ GSeedRunStageConfig BaseConfig(const std::string &pStageName,
 
 void AddKDF_BPrologue(TwistProgramBranch &pBranch) {
     pBranch.AddLine("// [kdf-b]");
-    for (int i = 0; i < 8; ++i) {
-        pBranch.AddLine(NonceLine(GSymbol::Var(kNonceVariableNames[static_cast<std::size_t>(i)]), i));
-    }
-
     pBranch.AddLine("std::uint64_t aDomainWordIngress = pConstants->mIngress;");
     pBranch.AddLine("std::uint64_t aDomainWordScatter = pConstants->mScatter;");
     pBranch.AddLine("std::uint64_t aDomainWordCross = pConstants->mCross;");
@@ -134,7 +110,7 @@ GSeedRunStageConfig MakeKDF_B_AConfig() {
     using Slot = TwistWorkSpaceSlot;
     GSeedRunStageConfig aConfig = BaseConfig("GSeedRunKDF_B_A",
                                              "kdf_b_loop_a",
-                                             GAXSFormat::kN5);
+                                             GAXSFormat::kN7);
     aConfig.mSlices = {
         {{Slot::kWorkLaneD, Slot::kWorkLaneC, Slot::kWorkLaneB, Slot::kWorkLaneA},
          Slot::kExpansionLaneA,
@@ -159,7 +135,11 @@ GSeedRunStageConfig MakeKDF_B_BConfig() {
     using Slot = TwistWorkSpaceSlot;
     GSeedRunStageConfig aConfig = BaseConfig("GSeedRunKDF_B_B",
                                              "kdf_b_loop_b",
-                                             GAXSFormat::kN7);
+                                             GAXSFormat::kN11);
+    
+    //aConfig.mIgnoreNonces = true;
+    //aConfig.mHasDomainMix = false;
+    
     aConfig.mSlices = {
         {{Slot::kExpansionLaneD, Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA},
          Slot::kOperationLaneA,
@@ -185,22 +165,35 @@ GSeedRunStageConfig MakeKDF_B_CConfig() {
     GSeedRunStageConfig aConfig = BaseConfig("GSeedRunKDF_B_C",
                                              "kdf_b_loop_c",
                                              GAXSFormat::kN9);
+    //aConfig.mIgnoreNonces = true;
+    //aConfig.mHasDomainMix = false;
+    
     aConfig.mSlices = {
+        
         {{Slot::kOperationLaneD, Slot::kOperationLaneC, Slot::kOperationLaneB, Slot::kOperationLaneA},
+         Slot::kWorkLaneA,
+         false},
+
+        {{Slot::kWorkLaneA, Slot::kOperationLaneD, Slot::kOperationLaneC, Slot::kOperationLaneB},
+         Slot::kWorkLaneB,
+         true},
+        
+        {{Slot::kWorkLaneB, Slot::kWorkLaneA, Slot::kOperationLaneD, Slot::kOperationLaneC},
          Slot::kExpansionLaneA,
          false},
-
-        {{Slot::kExpansionLaneA, Slot::kOperationLaneD, Slot::kOperationLaneC, Slot::kOperationLaneB},
-         Slot::kExpansionLaneB,
-         true},
-
-        {{Slot::kExpansionLaneB, Slot::kExpansionLaneA, Slot::kOperationLaneD, Slot::kOperationLaneC},
-         Slot::kExpansionLaneC,
+        
+        {{Slot::kExpansionLaneA, Slot::kWorkLaneB, Slot::kWorkLaneA, Slot::kOperationLaneD},
+            Slot::kExpansionLaneB,
          false},
-
-        {{Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA, Slot::kOperationLaneD},
-         Slot::kExpansionLaneD,
-         true},
+        
+        {{Slot::kExpansionLaneB, Slot::kExpansionLaneA, Slot::kWorkLaneB, Slot::kWorkLaneA},
+            Slot::kExpansionLaneC,
+         false},
+        
+        {{Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA, Slot::kWorkLaneB},
+            Slot::kExpansionLaneD,
+         false},
+        
     };
     return aConfig;
 }

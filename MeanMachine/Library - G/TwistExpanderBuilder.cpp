@@ -6,8 +6,11 @@
 #include "GTwistExpander.hpp"
 
 #include "FileIO.hpp"
+#include "GSeedRunStage.hpp"
 #include "GJson.hpp"
+#include "Random.hpp"
 
+#include <array>
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -87,6 +90,39 @@ std::string ResolveOutputPathFromProjectRoot(const std::string &pPath) {
 
     const std::filesystem::path aProjectRoot(FileIO::ProjectRoot());
     return (aProjectRoot / aInputPath).lexically_normal().generic_string();
+}
+
+const std::array<const char *, 3> kNonceDiffuseNames = {
+    "DiffuseA",
+    "DiffuseB",
+    "DiffuseC",
+};
+
+std::string UInt64Literal(const std::uint64_t pValue) {
+    std::ostringstream aStream;
+    aStream << "0x" << std::uppercase << std::hex << pValue << "ULL";
+    return aStream.str();
+}
+
+const char *RandomNonceDiffuseName() {
+    return kNonceDiffuseNames[static_cast<std::size_t>(Random::Get(static_cast<int>(kNonceDiffuseNames.size())))];
+}
+
+std::string NonceDeclareLine(const GSymbol &pNonceSymbol,
+                             const int pIndex) {
+    (void)pIndex;
+    const std::uint64_t aMultiplyWord = Random::Get64HighOdd();
+    const std::uint64_t aAddWord = Random::Get64High();
+    const char *aDiffuseName = RandomNonceDiffuseName();
+
+    std::ostringstream aLine;
+    aLine << "std::uint64_t " << pNonceSymbol.mName << " = TwistMix64::"
+          << aDiffuseName
+          << "(pNonce * "
+          << UInt64Literal(aMultiplyWord)
+          << " + "
+          << UInt64Literal(aAddWord) << ");";
+    return aLine.str();
 }
 
 [[maybe_unused]] std::string ResolveJsonOutputPath(const std::string &pRootPath,
@@ -774,13 +810,228 @@ bool ParseBatchJson(const std::string &pBatchJson,
     return true;
 }
 
+enum class ArxCallKind {
+    kKDF,
+    kSeed,
+    kTwist,
+};
+
+struct ArxCallExport {
+    ArxCallKind mKind = ArxCallKind::kKDF;
+    bool mUsesSnow = false;
+    bool mUsesNonce = true;
+    std::string mBatchName;
+    std::string mStartLine;
+    std::string mEndLine;
+    std::string mClassName;
+    std::string mMethodName;
+    std::string mInstanceName;
+    std::string mTitle;
+    std::string mReadFrom;
+    std::string mTempStorage;
+    std::string mWriteTo;
+};
+
+const ArxCallExport *FindArxCallForBatch(const std::vector<const ArxCallExport *> &pArxCalls,
+                                         const std::string &pBatchName) {
+    for (const ArxCallExport *aArxCall : pArxCalls) {
+        if ((aArxCall != nullptr) && (aArxCall->mBatchName == pBatchName)) {
+            return aArxCall;
+        }
+    }
+    return nullptr;
+}
+
+bool IsExternalArxBatch(const std::vector<const ArxCallExport *> &pArxCalls,
+                        const GBatch &pBatch) {
+    return FindArxCallForBatch(pArxCalls, pBatch.mName) != nullptr;
+}
+
+bool ShouldSkipExternalArxLine(const std::vector<const ArxCallExport *> &pArxCalls,
+                               const std::string &pLine) {
+    for (const ArxCallExport *pArxCall : pArxCalls) {
+        if (pArxCall == nullptr) {
+            continue;
+        }
+        if ((pLine == pArxCall->mStartLine) ||
+            (pLine == pArxCall->mEndLine)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool IsArxOnlyKDFDomainWord(const std::string &pName) {
+    return (pName == "aDomainWordIngress") ||
+           (pName == "aDomainWordScatter") ||
+           (pName == "aDomainWordCross");
+}
+
+bool IsArxOnlyDomainWordAssignmentLine(const std::string &pLine,
+                                       const std::vector<std::string> &pReferencedScalarVariables) {
+    for (const char *aName : {"aDomainWordIngress", "aDomainWordScatter", "aDomainWordCross"}) {
+        if (ContainsText(pReferencedScalarVariables, std::string(aName))) {
+            continue;
+        }
+
+        const std::string aDeclarePrefix = std::string("std::uint64_t ") + aName + " = ";
+        const std::string aAssignPrefix = std::string(aName) + " = ";
+        if ((pLine.rfind(aDeclarePrefix, 0U) == 0U) ||
+            (pLine.rfind(aAssignPrefix, 0U) == 0U)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ShouldSkipUnusedExternalArxDeclarationLine(const std::vector<const ArxCallExport *> &pArxCalls,
+                                                const std::vector<std::string> &pReferencedScalarVariables,
+                                                const std::string &pLine) {
+    if (pArxCalls.empty()) {
+        return false;
+    }
+
+    if (IsArxOnlyDomainWordAssignmentLine(pLine, pReferencedScalarVariables)) {
+        return true;
+    }
+
+    const std::string aDeclaredName = DeclaredIdentifierFromLine(pLine);
+    if (!IsArxOnlyKDFDomainWord(aDeclaredName)) {
+        return false;
+    }
+
+    return !ContainsText(pReferencedScalarVariables, aDeclaredName);
+}
+
+void AppendExternalArxStateVariables(std::vector<std::string> *pScalarVariables) {
+    if (pScalarVariables == nullptr) {
+        return;
+    }
+
+    static const char *kStateVariables[] = {
+        "aPrevious",
+        "aIngress",
+        "aCarry",
+        "aWandererA",
+        "aWandererB",
+        "aWandererC",
+        "aWandererD",
+        "aWandererE",
+        "aWandererF",
+        "aWandererG",
+        "aWandererH",
+        "aWandererI",
+        "aWandererJ",
+        "aWandererK",
+    };
+    for (const char *aName : kStateVariables) {
+        AppendUniqueValue(pScalarVariables, std::string(aName));
+    }
+}
+
+void AppendArxCall(const ArxCallExport &pArxCall,
+                   std::ostringstream *pStream) {
+    if (pStream == nullptr) {
+        return;
+    }
+
+    *pStream
+    << "    //\n"
+    << "    // ---------------------------------------------------\n"
+    << "    // " << pArxCall.mTitle << ":\n"
+    << "    // ---------------------------------------------------\n"
+    << "    // read from: " << pArxCall.mReadFrom << "\n";
+    if (!pArxCall.mTempStorage.empty()) {
+        *pStream << "    // temp storage: " << pArxCall.mTempStorage << "\n";
+    }
+    *pStream
+    << "    // ---------------------------------------------------\n"
+    << "    // write to: " << pArxCall.mWriteTo << "\n"
+    << "    // ---------------------------------------------------\n"
+    << "    //\n"
+    << "    " << pArxCall.mClassName << " " << pArxCall.mInstanceName << ";\n";
+    if ((pArxCall.mKind == ArxCallKind::kSeed) ||
+        (pArxCall.mKind == ArxCallKind::kTwist)) {
+        const char *aSourceArgument = (pArxCall.mKind == ArxCallKind::kTwist) ?
+            "pSourceInput" :
+            "mSource";
+        *pStream
+        << "    " << pArxCall.mInstanceName << "." << pArxCall.mMethodName << "(pWorkSpace,\n";
+        if (pArxCall.mUsesNonce) {
+            *pStream << "                 pNonce,\n";
+        }
+        *pStream
+        << "                 " << aSourceArgument << ",\n"
+        << "                 &aPrevious,\n"
+        << "                 &aIngress,\n"
+        << "                 &aCarry,\n"
+        << "                 &aWandererA,\n"
+        << "                 &aWandererB,\n"
+        << "                 &aWandererC,\n"
+        << "                 &aWandererD,\n"
+        << "                 &aWandererE,\n"
+        << "                 &aWandererF,\n"
+        << "                 &aWandererG,\n"
+        << "                 &aWandererH,\n"
+        << "                 &aWandererI,\n"
+        << "                 &aWandererJ,\n"
+        << "                 &aWandererK);\n"
+        << "\n";
+        return;
+    }
+
+    *pStream
+    << "    " << pArxCall.mInstanceName << "." << pArxCall.mMethodName << "(pWorkSpace,\n"
+    << "                 pNonce,\n"
+    << "                 pConstants,\n"
+    << "                 pDomainSaltSet,\n"
+    << "                 mSource,\n";
+    if (pArxCall.mUsesSnow) {
+        *pStream << "                 mSnow,\n";
+    }
+    *pStream
+    << "                 &aPrevious,\n"
+    << "                 &aIngress,\n"
+    << "                 &aCarry,\n"
+    << "                 &aWandererA,\n"
+    << "                 &aWandererB,\n"
+    << "                 &aWandererC,\n"
+    << "                 &aWandererD,\n"
+    << "                 &aWandererE,\n"
+    << "                 &aWandererF,\n"
+    << "                 &aWandererG,\n"
+    << "                 &aWandererH,\n"
+    << "                 &aWandererI,\n"
+    << "                 &aWandererJ,\n"
+    << "                 &aWandererK);\n"
+    << "\n";
+}
+
 bool AppendBranchBody(const TwistProgramBranch &pBranch,
                       const bool pIncludeKDFParameterAliases,
                       std::ostringstream *pStream,
-                      std::string *pError) {
+                      std::string *pError,
+                      const ArxCallExport *pArxCallA = nullptr,
+                      const ArxCallExport *pArxCallB = nullptr,
+                      const ArxCallExport *pArxCallC = nullptr,
+                      const ArxCallExport *pArxCallD = nullptr) {
     if (pStream == nullptr) {
         SetError(pError, "Branch output stream was null.");
         return false;
+    }
+
+    std::vector<const ArxCallExport *> aArxCalls;
+    if (pArxCallA != nullptr) {
+        aArxCalls.push_back(pArxCallA);
+    }
+    if (pArxCallB != nullptr) {
+        aArxCalls.push_back(pArxCallB);
+    }
+    if (pArxCallC != nullptr) {
+        aArxCalls.push_back(pArxCallC);
+    }
+    if (pArxCallD != nullptr) {
+        aArxCalls.push_back(pArxCallD);
     }
 
     struct ParsedBatch {
@@ -827,6 +1078,9 @@ bool AppendBranchBody(const TwistProgramBranch &pBranch,
             continue;
         }
         const GBatch &aBatch = aParsed.mBatch;
+        if (IsExternalArxBatch(aArxCalls, aBatch)) {
+            continue;
+        }
         for (const GLoop &aLoop : aBatch.mLoops) {
             if (!aLoop.mLoopVariableName.empty()) {
                 AppendUniqueValue(&aLoopVariables, aLoop.mLoopVariableName);
@@ -838,6 +1092,10 @@ bool AppendBranchBody(const TwistProgramBranch &pBranch,
         for (TwistWorkSpaceSlot aSlot : aBatch.CollectReferencedSlots()) {
             AppendUniqueValue(&aReferencedSlots, aSlot);
         }
+    }
+    const std::vector<std::string> aReferencedScalarVariables = aScalarVariables;
+    if (!aArxCalls.empty()) {
+        AppendExternalArxStateVariables(&aScalarVariables);
     }
 
     const std::vector<TwistWorkSpaceSlot> aAllSlots = FixedWorkspaceSlotOrder();
@@ -917,7 +1175,14 @@ bool AppendBranchBody(const TwistProgramBranch &pBranch,
             SetError(pError, "Branch line step index was out of range during export.");
             return false;
         }
-        *pStream << "    " << NormalizeLegacyByteTypeLine(pBranch.GetStringLines()[pIndex]) << '\n';
+        const std::string aLine = NormalizeLegacyByteTypeLine(pBranch.GetStringLines()[pIndex]);
+        if (ShouldSkipExternalArxLine(aArxCalls, aLine)) {
+            return true;
+        }
+        if (ShouldSkipUnusedExternalArxDeclarationLine(aArxCalls, aReferencedScalarVariables, aLine)) {
+            return true;
+        }
+        *pStream << "    " << aLine << '\n';
         return true;
     };
 
@@ -930,6 +1195,11 @@ bool AppendBranchBody(const TwistProgramBranch &pBranch,
         if (!aParsed.mValid) {
             *pStream << "    // export warning: skipped batch #" << aParsed.mIndex
                      << " (" << SanitizeSingleLineComment(aParsed.mError) << ")\n";
+            return true;
+        }
+
+        if (const ArxCallExport *aArxCall = FindArxCallForBatch(aArxCalls, aParsed.mBatch.mName)) {
+            AppendArxCall(*aArxCall, pStream);
             return true;
         }
 
@@ -989,6 +1259,1567 @@ bool AppendBranchBody(const TwistProgramBranch &pBranch,
 
     return true;
 }
+
+std::vector<TwistWorkSpaceSlot> ParamOrbiterAssignSalts() {
+    using Slot = TwistWorkSpaceSlot;
+    return {
+        Slot::kParamDomainSaltOrbiterAssignA,
+        Slot::kParamDomainSaltOrbiterAssignB,
+        Slot::kParamDomainSaltOrbiterAssignC,
+        Slot::kParamDomainSaltOrbiterAssignD,
+        Slot::kParamDomainSaltOrbiterAssignE,
+        Slot::kParamDomainSaltOrbiterAssignF,
+    };
+}
+
+std::vector<TwistWorkSpaceSlot> ParamOrbiterUpdateSalts() {
+    using Slot = TwistWorkSpaceSlot;
+    return {
+        Slot::kParamDomainSaltOrbiterUpdateA,
+        Slot::kParamDomainSaltOrbiterUpdateB,
+        Slot::kParamDomainSaltOrbiterUpdateC,
+        Slot::kParamDomainSaltOrbiterUpdateD,
+        Slot::kParamDomainSaltOrbiterUpdateE,
+        Slot::kParamDomainSaltOrbiterUpdateF,
+    };
+}
+
+std::vector<TwistWorkSpaceSlot> ParamWandererUpdateSalts() {
+    using Slot = TwistWorkSpaceSlot;
+    return {
+        Slot::kParamDomainSaltWandererUpdateA,
+        Slot::kParamDomainSaltWandererUpdateB,
+        Slot::kParamDomainSaltWandererUpdateC,
+        Slot::kParamDomainSaltWandererUpdateD,
+        Slot::kParamDomainSaltWandererUpdateE,
+        Slot::kParamDomainSaltWandererUpdateF,
+    };
+}
+
+GSeedRunStageConfig MakeExportArxKDF_A_AConfig() {
+    using Slot = TwistWorkSpaceSlot;
+    GSeedRunStageConfig aConfig;
+    aConfig.mStageName = "KDF_A_A";
+    aConfig.mBatchName = "kdf_a_loop_a";
+    aConfig.mStartLine = "// KDF_A_A kdf_a_loop_a (start)";
+    aConfig.mEndLine = "// KDF_A_A kdf_a_loop_a (end)";
+    aConfig.mFormat = GAXSFormat::kN11;
+    aConfig.mIgnoreNonces = false;
+    aConfig.mLaneCounts = { 2, 3, 4, 4, 4, 4 };
+    aConfig.mHasDomainMix = true;
+    aConfig.mAssignType = GAssignType::kSet;
+    aConfig.mDomain = TwistDomain::kInvalid;
+    aConfig.mIsNonKDF = false;
+    aConfig.mExpectedSkeletonCount = 6;
+    aConfig.mLoopCeiling = S_BLOCK;
+    aConfig.mLoopEndText = "S_BLOCK";
+    aConfig.mHotPackCount = 12;
+    aConfig.mSaltsOrbiterAssign = ParamOrbiterAssignSalts();
+    aConfig.mSaltsOrbiterUpdate = ParamOrbiterUpdateSalts();
+    aConfig.mSaltsWandererUpdate = ParamWandererUpdateSalts();
+    aConfig.mSlices = {
+        {{ Slot::kSource, Slot::kSnow },
+         Slot::kWorkLaneA,
+         false},
+
+        {{ Slot::kSource, Slot::kSnow, Slot::kWorkLaneA },
+         Slot::kWorkLaneB,
+         true},
+
+        {{ Slot::kSource, Slot::kSnow, Slot::kWorkLaneA, Slot::kWorkLaneB },
+         Slot::kExpansionLaneA,
+         false},
+
+        {{ Slot::kSnow, Slot::kWorkLaneA, Slot::kWorkLaneB, Slot::kExpansionLaneA },
+         Slot::kExpansionLaneB,
+         true},
+
+        {{ Slot::kWorkLaneA, Slot::kWorkLaneB, Slot::kExpansionLaneA, Slot::kExpansionLaneB },
+         Slot::kExpansionLaneC,
+         false},
+
+        {{ Slot::kWorkLaneB, Slot::kExpansionLaneA, Slot::kExpansionLaneB, Slot::kExpansionLaneC },
+         Slot::kExpansionLaneD,
+         true},
+    };
+    return aConfig;
+}
+
+GSeedRunStageConfig MakeExportArxKDF_A_BConfig() {
+    using Slot = TwistWorkSpaceSlot;
+    GSeedRunStageConfig aConfig;
+    aConfig.mStageName = "KDF_A_B";
+    aConfig.mBatchName = "kdf_a_loop_b";
+    aConfig.mStartLine = "// KDF_A_B kdf_a_loop_b (start)";
+    aConfig.mEndLine = "// KDF_A_B kdf_a_loop_b (end)";
+    aConfig.mFormat = GAXSFormat::kN9;
+    aConfig.mIgnoreNonces = false;
+    aConfig.mLaneCounts = { 4, 4, 4, 4 };
+    aConfig.mHasDomainMix = true;
+    aConfig.mAssignType = GAssignType::kSet;
+    aConfig.mDomain = TwistDomain::kInvalid;
+    aConfig.mIsNonKDF = false;
+    aConfig.mExpectedSkeletonCount = 6;
+    aConfig.mLoopCeiling = S_BLOCK;
+    aConfig.mLoopEndText = "S_BLOCK";
+    aConfig.mHotPackCount = 12;
+    aConfig.mSaltsOrbiterAssign = ParamOrbiterAssignSalts();
+    aConfig.mSaltsOrbiterUpdate = ParamOrbiterUpdateSalts();
+    aConfig.mSaltsWandererUpdate = ParamWandererUpdateSalts();
+    aConfig.mSlices = {
+        {{ Slot::kExpansionLaneD, Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA },
+         Slot::kOperationLaneA,
+         false},
+
+        {{ Slot::kOperationLaneA, Slot::kExpansionLaneD, Slot::kExpansionLaneC, Slot::kExpansionLaneB },
+         Slot::kOperationLaneB,
+         true},
+
+        {{ Slot::kOperationLaneB, Slot::kOperationLaneA, Slot::kExpansionLaneD, Slot::kExpansionLaneC },
+         Slot::kOperationLaneC,
+         false},
+
+        {{ Slot::kOperationLaneC, Slot::kOperationLaneB, Slot::kOperationLaneA, Slot::kExpansionLaneD },
+         Slot::kOperationLaneD,
+         true},
+    };
+    return aConfig;
+}
+
+GSeedRunStageConfig MakeExportArxKDF_A_CConfig() {
+    using Slot = TwistWorkSpaceSlot;
+    GSeedRunStageConfig aConfig;
+    aConfig.mStageName = "KDF_A_C";
+    aConfig.mBatchName = "kdf_a_loop_c";
+    aConfig.mStartLine = "// KDF_A_C kdf_a_loop_c (start)";
+    aConfig.mEndLine = "// KDF_A_C kdf_a_loop_c (end)";
+    aConfig.mFormat = GAXSFormat::kN9;
+    aConfig.mIgnoreNonces = false;
+    aConfig.mLaneCounts = { 4, 4, 4, 4 };
+    aConfig.mHasDomainMix = true;
+    aConfig.mAssignType = GAssignType::kSet;
+    aConfig.mDomain = TwistDomain::kInvalid;
+    aConfig.mIsNonKDF = false;
+    aConfig.mExpectedSkeletonCount = 6;
+    aConfig.mLoopCeiling = S_BLOCK;
+    aConfig.mLoopEndText = "S_BLOCK";
+    aConfig.mHotPackCount = 12;
+    aConfig.mSaltsOrbiterAssign = ParamOrbiterAssignSalts();
+    aConfig.mSaltsOrbiterUpdate = ParamOrbiterUpdateSalts();
+    aConfig.mSaltsWandererUpdate = ParamWandererUpdateSalts();
+    aConfig.mSlices = {
+        {{ Slot::kOperationLaneD, Slot::kOperationLaneC, Slot::kOperationLaneB, Slot::kOperationLaneA },
+         Slot::kWorkLaneA,
+         false},
+
+        {{ Slot::kWorkLaneA, Slot::kOperationLaneD, Slot::kOperationLaneC, Slot::kOperationLaneB },
+         Slot::kWorkLaneB,
+         true},
+
+        {{ Slot::kWorkLaneB, Slot::kWorkLaneA, Slot::kOperationLaneD, Slot::kOperationLaneC },
+         Slot::kWorkLaneC,
+         false},
+
+        {{ Slot::kWorkLaneC, Slot::kWorkLaneB, Slot::kWorkLaneA, Slot::kOperationLaneD },
+         Slot::kWorkLaneD,
+         true},
+    };
+    return aConfig;
+}
+
+GSeedRunStageConfig MakeExportArxKDF_A_DConfig() {
+    using Slot = TwistWorkSpaceSlot;
+    GSeedRunStageConfig aConfig;
+    aConfig.mStageName = "KDF_A_D";
+    aConfig.mBatchName = "kdf_a_loop_d";
+    aConfig.mStartLine = "// KDF_A_D kdf_a_loop_d (start)";
+    aConfig.mEndLine = "// KDF_A_D kdf_a_loop_d (end)";
+    aConfig.mFormat = GAXSFormat::kN5;
+    aConfig.mIgnoreNonces = false;
+    aConfig.mLaneCounts = { 4, 4, 4, 4 };
+    aConfig.mHasDomainMix = true;
+    aConfig.mAssignType = GAssignType::kSet;
+    aConfig.mDomain = TwistDomain::kInvalid;
+    aConfig.mIsNonKDF = false;
+    aConfig.mExpectedSkeletonCount = 6;
+    aConfig.mLoopCeiling = S_BLOCK;
+    aConfig.mLoopEndText = "S_BLOCK";
+    aConfig.mHotPackCount = 12;
+    aConfig.mSaltsOrbiterAssign = ParamOrbiterAssignSalts();
+    aConfig.mSaltsOrbiterUpdate = ParamOrbiterUpdateSalts();
+    aConfig.mSaltsWandererUpdate = ParamWandererUpdateSalts();
+    aConfig.mSlices = {
+        {{ Slot::kExpansionLaneD, Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA },
+         Slot::kWorkLaneA,
+         false},
+
+        {{ Slot::kWorkLaneA, Slot::kExpansionLaneD, Slot::kExpansionLaneC, Slot::kExpansionLaneB },
+         Slot::kWorkLaneB,
+         true},
+
+        {{ Slot::kWorkLaneB, Slot::kWorkLaneA, Slot::kExpansionLaneD, Slot::kExpansionLaneC },
+         Slot::kWorkLaneC,
+         false},
+
+        {{ Slot::kWorkLaneC, Slot::kWorkLaneB, Slot::kWorkLaneA, Slot::kExpansionLaneD },
+         Slot::kWorkLaneD,
+         true},
+    };
+    return aConfig;
+}
+
+GSeedRunStageConfig MakeExportArxKDF_B_AConfig() {
+    using Slot = TwistWorkSpaceSlot;
+    GSeedRunStageConfig aConfig;
+    aConfig.mStageName = "KDF_B_A";
+    aConfig.mBatchName = "kdf_b_loop_a";
+    aConfig.mStartLine = "// KDF_B_A kdf_b_loop_a (start)";
+    aConfig.mEndLine = "// KDF_B_A kdf_b_loop_a (end)";
+    aConfig.mFormat = GAXSFormat::kN5;
+    aConfig.mIgnoreNonces = false;
+    aConfig.mLaneCounts = { 4, 4, 4, 4 };
+    aConfig.mHasDomainMix = true;
+    aConfig.mAssignType = GAssignType::kSet;
+    aConfig.mDomain = TwistDomain::kInvalid;
+    aConfig.mIsNonKDF = false;
+    aConfig.mExpectedSkeletonCount = 6;
+    aConfig.mLoopCeiling = S_BLOCK;
+    aConfig.mLoopEndText = "S_BLOCK";
+    aConfig.mHotPackCount = 12;
+    aConfig.mSaltsOrbiterAssign = ParamOrbiterAssignSalts();
+    aConfig.mSaltsOrbiterUpdate = ParamOrbiterUpdateSalts();
+    aConfig.mSaltsWandererUpdate = ParamWandererUpdateSalts();
+    aConfig.mSlices = {
+        {{ Slot::kWorkLaneD, Slot::kWorkLaneC, Slot::kWorkLaneB, Slot::kWorkLaneA },
+         Slot::kExpansionLaneA,
+         false},
+
+        {{ Slot::kExpansionLaneA, Slot::kWorkLaneD, Slot::kWorkLaneC, Slot::kWorkLaneB },
+         Slot::kExpansionLaneB,
+         true},
+
+        {{ Slot::kExpansionLaneB, Slot::kExpansionLaneA, Slot::kWorkLaneD, Slot::kWorkLaneC },
+         Slot::kExpansionLaneC,
+         false},
+
+        {{ Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA, Slot::kWorkLaneD },
+         Slot::kExpansionLaneD,
+         true},
+    };
+    return aConfig;
+}
+
+GSeedRunStageConfig MakeExportArxKDF_B_BConfig() {
+    using Slot = TwistWorkSpaceSlot;
+    GSeedRunStageConfig aConfig;
+    aConfig.mStageName = "KDF_B_B";
+    aConfig.mBatchName = "kdf_b_loop_b";
+    aConfig.mStartLine = "// KDF_B_B kdf_b_loop_b (start)";
+    aConfig.mEndLine = "// KDF_B_B kdf_b_loop_b (end)";
+    aConfig.mFormat = GAXSFormat::kN7;
+    aConfig.mIgnoreNonces = false;
+    aConfig.mLaneCounts = { 4, 4, 4, 4 };
+    aConfig.mHasDomainMix = true;
+    aConfig.mAssignType = GAssignType::kSet;
+    aConfig.mDomain = TwistDomain::kInvalid;
+    aConfig.mIsNonKDF = false;
+    aConfig.mExpectedSkeletonCount = 6;
+    aConfig.mLoopCeiling = S_BLOCK;
+    aConfig.mLoopEndText = "S_BLOCK";
+    aConfig.mHotPackCount = 12;
+    aConfig.mSaltsOrbiterAssign = ParamOrbiterAssignSalts();
+    aConfig.mSaltsOrbiterUpdate = ParamOrbiterUpdateSalts();
+    aConfig.mSaltsWandererUpdate = ParamWandererUpdateSalts();
+    aConfig.mSlices = {
+        {{ Slot::kExpansionLaneD, Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA },
+         Slot::kOperationLaneA,
+         false},
+
+        {{ Slot::kOperationLaneA, Slot::kExpansionLaneD, Slot::kExpansionLaneC, Slot::kExpansionLaneB },
+         Slot::kOperationLaneB,
+         true},
+
+        {{ Slot::kOperationLaneB, Slot::kOperationLaneA, Slot::kExpansionLaneD, Slot::kExpansionLaneC },
+         Slot::kOperationLaneC,
+         false},
+
+        {{ Slot::kOperationLaneC, Slot::kOperationLaneB, Slot::kOperationLaneA, Slot::kExpansionLaneD },
+         Slot::kOperationLaneD,
+         true},
+    };
+    return aConfig;
+}
+
+GSeedRunStageConfig MakeExportArxKDF_B_CConfig() {
+    using Slot = TwistWorkSpaceSlot;
+    GSeedRunStageConfig aConfig;
+    aConfig.mStageName = "KDF_B_C";
+    aConfig.mBatchName = "kdf_b_loop_c";
+    aConfig.mStartLine = "// KDF_B_C kdf_b_loop_c (start)";
+    aConfig.mEndLine = "// KDF_B_C kdf_b_loop_c (end)";
+    aConfig.mFormat = GAXSFormat::kN9;
+    aConfig.mIgnoreNonces = false;
+    aConfig.mLaneCounts = { 4, 4, 4, 4 };
+    aConfig.mHasDomainMix = true;
+    aConfig.mAssignType = GAssignType::kSet;
+    aConfig.mDomain = TwistDomain::kInvalid;
+    aConfig.mIsNonKDF = false;
+    aConfig.mExpectedSkeletonCount = 6;
+    aConfig.mLoopCeiling = S_BLOCK;
+    aConfig.mLoopEndText = "S_BLOCK";
+    aConfig.mHotPackCount = 12;
+    aConfig.mSaltsOrbiterAssign = ParamOrbiterAssignSalts();
+    aConfig.mSaltsOrbiterUpdate = ParamOrbiterUpdateSalts();
+    aConfig.mSaltsWandererUpdate = ParamWandererUpdateSalts();
+    aConfig.mSlices = {
+        {{ Slot::kOperationLaneD, Slot::kOperationLaneC, Slot::kOperationLaneB, Slot::kOperationLaneA },
+         Slot::kWorkLaneA,
+         false},
+
+        {{ Slot::kWorkLaneA, Slot::kOperationLaneD, Slot::kOperationLaneC, Slot::kOperationLaneB },
+         Slot::kWorkLaneB,
+         true},
+
+        {{ Slot::kWorkLaneB, Slot::kWorkLaneA, Slot::kOperationLaneD, Slot::kOperationLaneC },
+         Slot::kExpansionLaneA,
+         false},
+
+        {{ Slot::kExpansionLaneA, Slot::kWorkLaneB, Slot::kWorkLaneA, Slot::kOperationLaneD },
+         Slot::kExpansionLaneB,
+         false},
+
+        {{ Slot::kExpansionLaneB, Slot::kExpansionLaneA, Slot::kWorkLaneB, Slot::kWorkLaneA },
+         Slot::kExpansionLaneC,
+         false},
+
+        {{ Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA, Slot::kWorkLaneB },
+         Slot::kExpansionLaneD,
+         false},
+    };
+    return aConfig;
+}
+
+int ExportArxPhaseIndex(const TwistDomain pDomain) {
+    switch (pDomain) {
+        case TwistDomain::kPhaseB: return 1;
+        case TwistDomain::kPhaseC: return 2;
+        case TwistDomain::kPhaseD: return 3;
+        case TwistDomain::kPhaseE: return 4;
+        case TwistDomain::kPhaseF: return 5;
+        case TwistDomain::kPhaseG: return 6;
+        case TwistDomain::kPhaseH: return 7;
+        case TwistDomain::kPhaseA:
+        default:
+            return 0;
+    }
+}
+
+std::string ExportArxSeedLoopName(const TwistDomain pDomain) {
+    std::string aResult = "seed_loop_";
+    aResult.push_back(static_cast<char>('a' + ExportArxPhaseIndex(pDomain)));
+    return aResult;
+}
+
+std::vector<TwistWorkSpaceSlot> ExportArxPhaseSalts(const TwistDomain pDomain,
+                                                    const TwistWorkSpaceSlot pBaseSlot,
+                                                    const int pLaneCount) {
+    const int aBase = static_cast<int>(pBaseSlot);
+    const int aOffset = ExportArxPhaseIndex(pDomain) * 18;
+
+    std::vector<TwistWorkSpaceSlot> aResult;
+    aResult.reserve(static_cast<std::size_t>(pLaneCount));
+    for (int i = 0; i < pLaneCount; ++i) {
+        aResult.push_back(static_cast<TwistWorkSpaceSlot>(aBase + aOffset + i));
+    }
+    return aResult;
+}
+
+GSeedRunStageConfig MakeExportArxSeedBaseConfig(const std::string &pStageName,
+                                                const TwistDomain pDomain,
+                                                const bool pUseNonces,
+                                                const GAXSFormat pFormat,
+                                                std::vector<int> pLaneCounts) {
+    using Slot = TwistWorkSpaceSlot;
+
+    const std::string aLoopName = ExportArxSeedLoopName(pDomain);
+    GSeedRunStageConfig aConfig;
+    aConfig.mStageName = pStageName;
+    aConfig.mBatchName = aLoopName;
+    aConfig.mStartLine = "// " + pStageName + " " + aLoopName + " (start)";
+    aConfig.mEndLine = "// " + pStageName + " " + aLoopName + " (end)";
+    aConfig.mFormat = pFormat;
+    aConfig.mIgnoreNonces = !pUseNonces;
+    aConfig.mLaneCounts = pLaneCounts;
+    aConfig.mHasDomainMix = true;
+    aConfig.mAssignType = GAssignType::kSet;
+    aConfig.mDomain = pDomain;
+    aConfig.mIsNonKDF = true;
+    aConfig.mExpectedSkeletonCount = 6;
+    aConfig.mLoopCeiling = S_BLOCK;
+    aConfig.mLoopEndText = "S_BLOCK";
+    aConfig.mHotPackCount = 12;
+    aConfig.mSaltsOrbiterAssign = ExportArxPhaseSalts(pDomain, Slot::kPhaseASaltOrbiterAssignA, 6);
+    aConfig.mSaltsOrbiterUpdate = ExportArxPhaseSalts(pDomain, Slot::kPhaseASaltOrbiterUpdateA, 6);
+    aConfig.mSaltsWandererUpdate = ExportArxPhaseSalts(pDomain, Slot::kPhaseASaltWandererUpdateA, 6);
+    return aConfig;
+}
+
+GSeedRunStageConfig MakeExportArxSeed_AConfig() {
+    using Slot = TwistWorkSpaceSlot;
+
+    GSeedRunStageConfig aConfig = MakeExportArxSeedBaseConfig("GSeedRunSeed_A",
+                                                              TwistDomain::kPhaseA,
+                                                              true,
+                                                              GAXSFormat::kN7,
+                                                              { 3, 4, 4, 4 });
+    aConfig.mSlices = {
+        {{ Slot::kSource, Slot::kKeyBoxUnrolledA, Slot::kKeyBoxUnrolledB },
+         Slot::kExpansionLaneA,
+         false},
+
+        {{ Slot::kExpansionLaneA, Slot::kSource, Slot::kKeyBoxUnrolledA, Slot::kKeyBoxUnrolledB },
+         Slot::kExpansionLaneB,
+         true},
+
+        {{ Slot::kExpansionLaneB, Slot::kExpansionLaneA, Slot::kKeyBoxUnrolledA, Slot::kKeyBoxUnrolledB },
+         Slot::kExpansionLaneC,
+         false},
+
+        {{ Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA, Slot::kSource },
+         Slot::kExpansionLaneD,
+         true},
+    };
+    return aConfig;
+}
+
+GSeedRunStageConfig MakeExportArxSeed_BConfig() {
+    using Slot = TwistWorkSpaceSlot;
+
+    GSeedRunStageConfig aConfig = MakeExportArxSeedBaseConfig("GSeedRunSeed_B",
+                                                              TwistDomain::kPhaseB,
+                                                              true,
+                                                              GAXSFormat::kN5,
+                                                              { 4, 4, 4, 4 });
+    aConfig.mSlices = {
+        {{ Slot::kExpansionLaneD, Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA },
+         Slot::kOperationLaneA,
+         false},
+
+        {{ Slot::kOperationLaneA, Slot::kExpansionLaneD, Slot::kExpansionLaneC, Slot::kExpansionLaneB },
+         Slot::kOperationLaneB,
+         true},
+
+        {{ Slot::kOperationLaneB, Slot::kOperationLaneA, Slot::kExpansionLaneD, Slot::kExpansionLaneC },
+         Slot::kOperationLaneC,
+         false},
+
+        {{ Slot::kOperationLaneC, Slot::kOperationLaneB, Slot::kOperationLaneA, Slot::kExpansionLaneD },
+         Slot::kOperationLaneD,
+         true},
+    };
+    return aConfig;
+}
+
+GSeedRunStageConfig MakeExportArxSeed_CConfig() {
+    using Slot = TwistWorkSpaceSlot;
+
+    GSeedRunStageConfig aConfig = MakeExportArxSeedBaseConfig("GSeedRunSeed_C",
+                                                              TwistDomain::kPhaseC,
+                                                              true,
+                                                              GAXSFormat::kN11,
+                                                              { 4, 4, 4, 4 });
+    aConfig.mSlices = {
+        {{ Slot::kOperationLaneD, Slot::kOperationLaneC, Slot::kOperationLaneB, Slot::kOperationLaneA },
+         Slot::kWorkLaneA,
+         true},
+
+        {{ Slot::kWorkLaneA, Slot::kOperationLaneD, Slot::kOperationLaneC, Slot::kOperationLaneB },
+         Slot::kWorkLaneB,
+         false},
+
+        {{ Slot::kWorkLaneB, Slot::kWorkLaneA, Slot::kOperationLaneD, Slot::kOperationLaneC },
+         Slot::kWorkLaneC,
+         true},
+
+        {{ Slot::kWorkLaneC, Slot::kWorkLaneB, Slot::kWorkLaneA, Slot::kOperationLaneD },
+         Slot::kWorkLaneD,
+         false},
+    };
+    return aConfig;
+}
+
+GSeedRunStageConfig MakeExportArxSeed_DConfig() {
+    using Slot = TwistWorkSpaceSlot;
+
+    GSeedRunStageConfig aConfig = MakeExportArxSeedBaseConfig("GSeedRunSeed_D",
+                                                              TwistDomain::kPhaseD,
+                                                              true,
+                                                              GAXSFormat::kN9,
+                                                              { 4, 4, 4, 4 });
+    aConfig.mSlices = {
+        {{ Slot::kExpansionLaneD, Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA },
+         Slot::kWorkLaneA,
+         false},
+
+        {{ Slot::kWorkLaneA, Slot::kExpansionLaneD, Slot::kExpansionLaneC, Slot::kExpansionLaneB },
+         Slot::kWorkLaneB,
+         true},
+
+        {{ Slot::kWorkLaneB, Slot::kWorkLaneA, Slot::kExpansionLaneD, Slot::kExpansionLaneC },
+         Slot::kWorkLaneC,
+         false},
+
+        {{ Slot::kWorkLaneC, Slot::kWorkLaneB, Slot::kWorkLaneA, Slot::kExpansionLaneD },
+         Slot::kWorkLaneD,
+         true},
+    };
+    return aConfig;
+}
+
+GSeedRunStageConfig MakeExportArxTwist_AConfig() {
+    using Slot = TwistWorkSpaceSlot;
+
+    GSeedRunStageConfig aConfig;
+    aConfig.mStageName = "GTwistRunTwist_A";
+    aConfig.mBatchName = "twist_loop_a";
+    aConfig.mStartLine = "// GTwistRunTwist_A twist_loop_a (start)";
+    aConfig.mEndLine = "// GTwistRunTwist_A twist_loop_a (end)";
+    aConfig.mFormat = GAXSFormat::kN5;
+    aConfig.mIgnoreNonces = true;
+    aConfig.mLaneCounts = { 3, 4, 4, 4 };
+    aConfig.mHasDomainMix = false;
+    aConfig.mAssignType = GAssignType::kSet;
+    aConfig.mDomain = TwistDomain::kPhaseA;
+    aConfig.mIsNonKDF = true;
+    aConfig.mExpectedSkeletonCount = 6;
+    aConfig.mLoopCeiling = S_BLOCK;
+    aConfig.mLoopEndText = "S_BLOCK";
+    aConfig.mHotPackCount = 12;
+    aConfig.mSaltsOrbiterAssign = ExportArxPhaseSalts(TwistDomain::kPhaseA,
+                                                       Slot::kPhaseASaltOrbiterAssignA,
+                                                       6);
+    aConfig.mSaltsOrbiterUpdate = ExportArxPhaseSalts(TwistDomain::kPhaseA,
+                                                      Slot::kPhaseASaltOrbiterUpdateA,
+                                                      6);
+    aConfig.mSaltsWandererUpdate = ExportArxPhaseSalts(TwistDomain::kPhaseA,
+                                                        Slot::kPhaseASaltWandererUpdateA,
+                                                        6);
+    aConfig.mSlices = {
+        {{ Slot::kSource, Slot::kKeyBoxUnrolledA, Slot::kKeyBoxUnrolledB },
+         Slot::kExpansionLaneA,
+         false},
+
+        {{ Slot::kExpansionLaneA, Slot::kSource, Slot::kKeyBoxUnrolledA, Slot::kKeyBoxUnrolledB },
+         Slot::kExpansionLaneB,
+         true},
+
+        {{ Slot::kExpansionLaneB, Slot::kExpansionLaneA, Slot::kKeyBoxUnrolledA, Slot::kKeyBoxUnrolledB },
+         Slot::kExpansionLaneC,
+         false},
+
+        {{ Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA, Slot::kSource },
+         Slot::kExpansionLaneD,
+         true},
+    };
+    return aConfig;
+}
+
+GSeedRunStageConfig MakeExportArxTwist_BConfig() {
+    using Slot = TwistWorkSpaceSlot;
+
+    GSeedRunStageConfig aConfig;
+    aConfig.mStageName = "GTwistRunTwist_B";
+    aConfig.mBatchName = "twist_loop_b";
+    aConfig.mStartLine = "// GTwistRunTwist_B twist_loop_b (start)";
+    aConfig.mEndLine = "// GTwistRunTwist_B twist_loop_b (end)";
+    aConfig.mFormat = GAXSFormat::kN5;
+    aConfig.mIgnoreNonces = true;
+    aConfig.mLaneCounts = { 4, 4, 4, 4 };
+    aConfig.mHasDomainMix = false;
+    aConfig.mAssignType = GAssignType::kSet;
+    aConfig.mDomain = TwistDomain::kPhaseB;
+    aConfig.mIsNonKDF = true;
+    aConfig.mExpectedSkeletonCount = 6;
+    aConfig.mLoopCeiling = S_BLOCK;
+    aConfig.mLoopEndText = "S_BLOCK";
+    aConfig.mHotPackCount = 12;
+    aConfig.mSaltsOrbiterAssign = ExportArxPhaseSalts(TwistDomain::kPhaseB,
+                                                       Slot::kPhaseASaltOrbiterAssignA,
+                                                       6);
+    aConfig.mSaltsOrbiterUpdate = ExportArxPhaseSalts(TwistDomain::kPhaseB,
+                                                      Slot::kPhaseASaltOrbiterUpdateA,
+                                                      6);
+    aConfig.mSaltsWandererUpdate = ExportArxPhaseSalts(TwistDomain::kPhaseB,
+                                                        Slot::kPhaseASaltWandererUpdateA,
+                                                        6);
+    aConfig.mSlices = {
+        {{ Slot::kExpansionLaneD, Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA },
+         Slot::kOperationLaneA,
+         false},
+
+        {{ Slot::kOperationLaneA,
+           Slot::kExpansionLaneD,
+           Slot::kExpansionLaneC,
+           Slot::kExpansionLaneB,
+           Slot::kSource,
+           Slot::kKeyBoxUnrolledA,
+           Slot::kKeyBoxUnrolledB },
+         Slot::kOperationLaneB,
+         true},
+
+        {{ Slot::kOperationLaneB, Slot::kOperationLaneA, Slot::kExpansionLaneD, Slot::kExpansionLaneC },
+         Slot::kOperationLaneC,
+         false},
+
+        {{ Slot::kOperationLaneC, Slot::kOperationLaneB, Slot::kOperationLaneA, Slot::kExpansionLaneD },
+         Slot::kOperationLaneD,
+         true},
+    };
+    return aConfig;
+}
+
+GSeedRunStageConfig MakeExportArxTwist_CConfig() {
+    using Slot = TwistWorkSpaceSlot;
+
+    GSeedRunStageConfig aConfig;
+    aConfig.mStageName = "GTwistRunTwist_C";
+    aConfig.mBatchName = "twist_loop_c";
+    aConfig.mStartLine = "// GTwistRunTwist_C twist_loop_c (start)";
+    aConfig.mEndLine = "// GTwistRunTwist_C twist_loop_c (end)";
+    aConfig.mFormat = GAXSFormat::kN7;
+    aConfig.mIgnoreNonces = true;
+    aConfig.mLaneCounts = { 4, 4, 4, 4 };
+    aConfig.mHasDomainMix = false;
+    aConfig.mAssignType = GAssignType::kSet;
+    aConfig.mDomain = TwistDomain::kPhaseC;
+    aConfig.mIsNonKDF = true;
+    aConfig.mExpectedSkeletonCount = 6;
+    aConfig.mLoopCeiling = S_BLOCK;
+    aConfig.mLoopEndText = "S_BLOCK";
+    aConfig.mHotPackCount = 12;
+    aConfig.mSaltsOrbiterAssign = ExportArxPhaseSalts(TwistDomain::kPhaseC,
+                                                       Slot::kPhaseASaltOrbiterAssignA,
+                                                       6);
+    aConfig.mSaltsOrbiterUpdate = ExportArxPhaseSalts(TwistDomain::kPhaseC,
+                                                      Slot::kPhaseASaltOrbiterUpdateA,
+                                                      6);
+    aConfig.mSaltsWandererUpdate = ExportArxPhaseSalts(TwistDomain::kPhaseC,
+                                                        Slot::kPhaseASaltWandererUpdateA,
+                                                        6);
+    aConfig.mSlices = {
+        {{ Slot::kOperationLaneD, Slot::kOperationLaneC, Slot::kOperationLaneB, Slot::kOperationLaneA },
+         Slot::kWorkLaneA,
+         true},
+
+        {{ Slot::kWorkLaneA,
+           Slot::kOperationLaneD,
+           Slot::kOperationLaneC,
+           Slot::kOperationLaneB,
+           Slot::kSource,
+           Slot::kKeyBoxUnrolledA,
+           Slot::kKeyBoxUnrolledB },
+         Slot::kWorkLaneB,
+         false},
+
+        {{ Slot::kWorkLaneB, Slot::kWorkLaneA, Slot::kOperationLaneD, Slot::kOperationLaneC },
+         Slot::kWorkLaneC,
+         true},
+
+        {{ Slot::kWorkLaneC, Slot::kWorkLaneB, Slot::kWorkLaneA, Slot::kOperationLaneD },
+         Slot::kWorkLaneD,
+         false},
+    };
+    return aConfig;
+}
+
+void AddExportArxKDFPrologue(TwistProgramBranch *pBranch,
+                             const bool pUsesSnow) {
+    if (pBranch == nullptr) {
+        return;
+    }
+
+    static const std::array<const char *, 8> kNonceVariableNames = {
+        "aNonceWordA",
+        "aNonceWordB",
+        "aNonceWordC",
+        "aNonceWordD",
+        "aNonceWordE",
+        "aNonceWordF",
+        "aNonceWordG",
+        "aNonceWordH",
+    };
+
+    pBranch->AddLine("// [kdf-a arx]");
+    for (int i = 0; i < 8; ++i) {
+        pBranch->AddLine(NonceDeclareLine(GSymbol::Var(kNonceVariableNames[static_cast<std::size_t>(i)]), i));
+    }
+    pBranch->AddLine("std::uint64_t aDomainWordIngress = pConstants->mIngress;");
+    pBranch->AddLine("std::uint64_t aDomainWordScatter = pConstants->mScatter;");
+    pBranch->AddLine("std::uint64_t aDomainWordCross = pConstants->mCross;");
+    pBranch->AddLine("[[maybe_unused]] std::uint8_t *mSource = pSource;");
+    if (pUsesSnow) {
+        pBranch->AddLine("[[maybe_unused]] std::uint8_t *mSnow = pSnow;");
+    }
+    pBranch->AddLine("std::uint64_t aPrevious = *pPrevious;");
+    pBranch->AddLine("std::uint64_t aIngress = *pIngress;");
+    pBranch->AddLine("std::uint64_t aCarry = *pCarry;");
+    pBranch->AddLine("std::uint64_t aWandererA = *pWandererA;");
+    pBranch->AddLine("std::uint64_t aWandererB = *pWandererB;");
+    pBranch->AddLine("std::uint64_t aWandererC = *pWandererC;");
+    pBranch->AddLine("std::uint64_t aWandererD = *pWandererD;");
+    pBranch->AddLine("std::uint64_t aWandererE = *pWandererE;");
+    pBranch->AddLine("std::uint64_t aWandererF = *pWandererF;");
+    pBranch->AddLine("std::uint64_t aWandererG = *pWandererG;");
+    pBranch->AddLine("std::uint64_t aWandererH = *pWandererH;");
+    pBranch->AddLine("std::uint64_t aWandererI = *pWandererI;");
+    pBranch->AddLine("std::uint64_t aWandererJ = *pWandererJ;");
+    pBranch->AddLine("std::uint64_t aWandererK = *pWandererK;");
+}
+
+void AddExportArxKDF_A_AEpilogue(TwistProgramBranch *pBranch) {
+    if (pBranch == nullptr) {
+        return;
+    }
+
+    pBranch->AddLine("*pPrevious = aPrevious;");
+    pBranch->AddLine("*pIngress = aIngress;");
+    pBranch->AddLine("*pCarry = aCarry;");
+    pBranch->AddLine("*pWandererA = aWandererA;");
+    pBranch->AddLine("*pWandererB = aWandererB;");
+    pBranch->AddLine("*pWandererC = aWandererC;");
+    pBranch->AddLine("*pWandererD = aWandererD;");
+    pBranch->AddLine("*pWandererE = aWandererE;");
+    pBranch->AddLine("*pWandererF = aWandererF;");
+    pBranch->AddLine("*pWandererG = aWandererG;");
+    pBranch->AddLine("*pWandererH = aWandererH;");
+    pBranch->AddLine("*pWandererI = aWandererI;");
+    pBranch->AddLine("*pWandererJ = aWandererJ;");
+    pBranch->AddLine("*pWandererK = aWandererK;");
+}
+
+void AddExportArxSeedNonceLines(TwistProgramBranch *pBranch) {
+    if (pBranch == nullptr) {
+        return;
+    }
+
+    static const std::array<const char *, 8> kNonceVariableNames = {
+        "aNonceWordA",
+        "aNonceWordB",
+        "aNonceWordC",
+        "aNonceWordD",
+        "aNonceWordE",
+        "aNonceWordF",
+        "aNonceWordG",
+        "aNonceWordH",
+    };
+
+    for (int i = 0; i < 8; ++i) {
+        pBranch->AddLine(NonceDeclareLine(GSymbol::Var(kNonceVariableNames[static_cast<std::size_t>(i)]), i));
+    }
+}
+
+void AddExportArxSeedPrologue(TwistProgramBranch *pBranch) {
+    if (pBranch == nullptr) {
+        return;
+    }
+
+    pBranch->AddLine("// [seed arx]");
+    pBranch->AddLine("[[maybe_unused]] std::uint8_t *mSource = pSource;");
+    pBranch->AddLine("std::uint64_t aPrevious = *pPrevious;");
+    pBranch->AddLine("std::uint64_t aIngress = *pIngress;");
+    pBranch->AddLine("std::uint64_t aCarry = *pCarry;");
+    pBranch->AddLine("std::uint64_t aWandererA = *pWandererA;");
+    pBranch->AddLine("std::uint64_t aWandererB = *pWandererB;");
+    pBranch->AddLine("std::uint64_t aWandererC = *pWandererC;");
+    pBranch->AddLine("std::uint64_t aWandererD = *pWandererD;");
+    pBranch->AddLine("std::uint64_t aWandererE = *pWandererE;");
+    pBranch->AddLine("std::uint64_t aWandererF = *pWandererF;");
+    pBranch->AddLine("std::uint64_t aWandererG = *pWandererG;");
+    pBranch->AddLine("std::uint64_t aWandererH = *pWandererH;");
+    pBranch->AddLine("std::uint64_t aWandererI = *pWandererI;");
+    pBranch->AddLine("std::uint64_t aWandererJ = *pWandererJ;");
+    pBranch->AddLine("std::uint64_t aWandererK = *pWandererK;");
+}
+
+void AddExportArxSeedEpilogue(TwistProgramBranch *pBranch) {
+    if (pBranch == nullptr) {
+        return;
+    }
+
+    pBranch->AddLine("*pPrevious = aPrevious;");
+    pBranch->AddLine("*pIngress = aIngress;");
+    pBranch->AddLine("*pCarry = aCarry;");
+    pBranch->AddLine("*pWandererA = aWandererA;");
+    pBranch->AddLine("*pWandererB = aWandererB;");
+    pBranch->AddLine("*pWandererC = aWandererC;");
+    pBranch->AddLine("*pWandererD = aWandererD;");
+    pBranch->AddLine("*pWandererE = aWandererE;");
+    pBranch->AddLine("*pWandererF = aWandererF;");
+    pBranch->AddLine("*pWandererG = aWandererG;");
+    pBranch->AddLine("*pWandererH = aWandererH;");
+    pBranch->AddLine("*pWandererI = aWandererI;");
+    pBranch->AddLine("*pWandererJ = aWandererJ;");
+    pBranch->AddLine("*pWandererK = aWandererK;");
+}
+
+void AddExportArxTwistPrologue(TwistProgramBranch *pBranch) {
+    if (pBranch == nullptr) {
+        return;
+    }
+
+    pBranch->AddLine("// [twist arx]");
+    pBranch->AddLine("[[maybe_unused]] std::uint8_t *mSource = pSource;");
+    pBranch->AddLine("std::uint64_t aPrevious = *pPrevious;");
+    pBranch->AddLine("std::uint64_t aIngress = *pIngress;");
+    pBranch->AddLine("std::uint64_t aCarry = *pCarry;");
+    pBranch->AddLine("std::uint64_t aWandererA = *pWandererA;");
+    pBranch->AddLine("std::uint64_t aWandererB = *pWandererB;");
+    pBranch->AddLine("std::uint64_t aWandererC = *pWandererC;");
+    pBranch->AddLine("std::uint64_t aWandererD = *pWandererD;");
+    pBranch->AddLine("std::uint64_t aWandererE = *pWandererE;");
+    pBranch->AddLine("std::uint64_t aWandererF = *pWandererF;");
+    pBranch->AddLine("std::uint64_t aWandererG = *pWandererG;");
+    pBranch->AddLine("std::uint64_t aWandererH = *pWandererH;");
+    pBranch->AddLine("std::uint64_t aWandererI = *pWandererI;");
+    pBranch->AddLine("std::uint64_t aWandererJ = *pWandererJ;");
+    pBranch->AddLine("std::uint64_t aWandererK = *pWandererK;");
+}
+
+bool BuildExportArxKDFBranch(TwistProgramBranch *pBranch,
+                             const GSeedRunStageConfig &pConfig,
+                             const std::string &pStageName,
+                             const bool pUsesSnow,
+                             std::string *pError) {
+    if (pBranch == nullptr) {
+        SetError(pError, "ARX branch output was null.");
+        return false;
+    }
+
+    pBranch->Clear();
+    AddExportArxKDFPrologue(pBranch, pUsesSnow);
+
+    GSeedRunStage aStage(pConfig);
+    if (!aStage.Plan(pError)) {
+        if ((pError != nullptr) && pError->empty()) {
+            *pError = "Failed to plan exported ARX " + pStageName + ".";
+        }
+        return false;
+    }
+    if (!aStage.Build(*pBranch, pError)) {
+        if ((pError != nullptr) && pError->empty()) {
+            *pError = "Failed to build exported ARX " + pStageName + ".";
+        }
+        return false;
+    }
+
+    AddExportArxKDF_A_AEpilogue(pBranch);
+    return true;
+}
+
+bool BuildExportArxSeedBranch(TwistProgramBranch *pBranch,
+                              const GSeedRunStageConfig &pConfig,
+                              const std::string &pStageName,
+                              std::string *pError) {
+    if (pBranch == nullptr) {
+        SetError(pError, "Seed ARX branch output was null.");
+        return false;
+    }
+
+    pBranch->Clear();
+    AddExportArxSeedPrologue(pBranch);
+    if (!pConfig.mIgnoreNonces) {
+        AddExportArxSeedNonceLines(pBranch);
+    }
+
+    GSeedRunStage aStage(pConfig);
+    if (!aStage.Plan(pError)) {
+        if ((pError != nullptr) && pError->empty()) {
+            *pError = "Failed to plan exported ARX " + pStageName + ".";
+        }
+        return false;
+    }
+    if (!aStage.Build(*pBranch, pError)) {
+        if ((pError != nullptr) && pError->empty()) {
+            *pError = "Failed to build exported ARX " + pStageName + ".";
+        }
+        return false;
+    }
+
+    AddExportArxSeedEpilogue(pBranch);
+    return true;
+}
+
+bool BuildExportArxTwistBranch(TwistProgramBranch *pBranch,
+                               const GSeedRunStageConfig &pConfig,
+                               const std::string &pStageName,
+                               std::string *pError) {
+    if (pBranch == nullptr) {
+        SetError(pError, "Twist ARX branch output was null.");
+        return false;
+    }
+
+    pBranch->Clear();
+    AddExportArxTwistPrologue(pBranch);
+
+    GSeedRunStage aStage(pConfig);
+    if (!aStage.Plan(pError)) {
+        if ((pError != nullptr) && pError->empty()) {
+            *pError = "Failed to plan exported ARX " + pStageName + ".";
+        }
+        return false;
+    }
+    if (!aStage.Build(*pBranch, pError)) {
+        if ((pError != nullptr) && pError->empty()) {
+            *pError = "Failed to build exported ARX " + pStageName + ".";
+        }
+        return false;
+    }
+
+    AddExportArxSeedEpilogue(pBranch);
+    return true;
+}
+
+bool BuildExportArxKDF_A_ABranch(TwistProgramBranch *pBranch,
+                                 std::string *pError) {
+    return BuildExportArxKDFBranch(pBranch,
+                                   MakeExportArxKDF_A_AConfig(),
+                                   "KDF_A_A",
+                                   true,
+                                   pError);
+}
+
+bool BuildExportArxKDF_A_BBranch(TwistProgramBranch *pBranch,
+                                 std::string *pError) {
+    return BuildExportArxKDFBranch(pBranch,
+                                   MakeExportArxKDF_A_BConfig(),
+                                   "KDF_A_B",
+                                   false,
+                                   pError);
+}
+
+bool BuildExportArxKDF_A_CBranch(TwistProgramBranch *pBranch,
+                                 std::string *pError) {
+    return BuildExportArxKDFBranch(pBranch,
+                                   MakeExportArxKDF_A_CConfig(),
+                                   "KDF_A_C",
+                                   false,
+                                   pError);
+}
+
+bool BuildExportArxKDF_A_DBranch(TwistProgramBranch *pBranch,
+                                 std::string *pError) {
+    return BuildExportArxKDFBranch(pBranch,
+                                   MakeExportArxKDF_A_DConfig(),
+                                   "KDF_A_D",
+                                   false,
+                                   pError);
+}
+
+bool BuildExportArxKDF_B_ABranch(TwistProgramBranch *pBranch,
+                                 std::string *pError) {
+    return BuildExportArxKDFBranch(pBranch,
+                                   MakeExportArxKDF_B_AConfig(),
+                                   "KDF_B_A",
+                                   false,
+                                   pError);
+}
+
+bool BuildExportArxKDF_B_BBranch(TwistProgramBranch *pBranch,
+                                 std::string *pError) {
+    return BuildExportArxKDFBranch(pBranch,
+                                   MakeExportArxKDF_B_BConfig(),
+                                   "KDF_B_B",
+                                   false,
+                                   pError);
+}
+
+bool BuildExportArxKDF_B_CBranch(TwistProgramBranch *pBranch,
+                                 std::string *pError) {
+    return BuildExportArxKDFBranch(pBranch,
+                                   MakeExportArxKDF_B_CConfig(),
+                                   "KDF_B_C",
+                                   false,
+                                   pError);
+}
+
+bool BuildExportArxSeed_ABranch(TwistProgramBranch *pBranch,
+                                std::string *pError) {
+    return BuildExportArxSeedBranch(pBranch,
+                                    MakeExportArxSeed_AConfig(),
+                                    "Seed_A",
+                                    pError);
+}
+
+bool BuildExportArxSeed_BBranch(TwistProgramBranch *pBranch,
+                                std::string *pError) {
+    return BuildExportArxSeedBranch(pBranch,
+                                    MakeExportArxSeed_BConfig(),
+                                    "Seed_B",
+                                    pError);
+}
+
+bool BuildExportArxSeed_CBranch(TwistProgramBranch *pBranch,
+                                std::string *pError) {
+    return BuildExportArxSeedBranch(pBranch,
+                                    MakeExportArxSeed_CConfig(),
+                                    "Seed_C",
+                                    pError);
+}
+
+bool BuildExportArxSeed_DBranch(TwistProgramBranch *pBranch,
+                                std::string *pError) {
+    return BuildExportArxSeedBranch(pBranch,
+                                    MakeExportArxSeed_DConfig(),
+                                    "Seed_D",
+                                    pError);
+}
+
+bool BuildExportArxTwist_ABranch(TwistProgramBranch *pBranch,
+                                 std::string *pError) {
+    return BuildExportArxTwistBranch(pBranch,
+                                     MakeExportArxTwist_AConfig(),
+                                     "Twist_A",
+                                     pError);
+}
+
+bool BuildExportArxTwist_BBranch(TwistProgramBranch *pBranch,
+                                 std::string *pError) {
+    return BuildExportArxTwistBranch(pBranch,
+                                     MakeExportArxTwist_BConfig(),
+                                     "Twist_B",
+                                     pError);
+}
+
+bool BuildExportArxTwist_CBranch(TwistProgramBranch *pBranch,
+                                 std::string *pError) {
+    return BuildExportArxTwistBranch(pBranch,
+                                     MakeExportArxTwist_CConfig(),
+                                     "Twist_C",
+                                     pError);
+}
+
+void AppendArxKDFSignature(std::ostringstream *pStream,
+                           const std::string &pClassName,
+                           const std::string &pMethodName,
+                           const bool pDefinition,
+                           const bool pUsesSnow) {
+    if (pStream == nullptr) {
+        return;
+    }
+
+    const std::string aPrefix = pDefinition ?
+        ("void " + pClassName + "::") :
+        "    void ";
+    const std::string aSuffix = pDefinition ? " {\n" : " override;\n";
+    *pStream
+    << aPrefix << pMethodName << "(TwistWorkSpace *pWorkSpace,\n"
+    << "                     std::uint64_t pNonce,\n"
+    << "                     TwistDomainConstants *pConstants,\n"
+    << "                     TwistDomainSaltSet *pDomainSaltSet,\n"
+    << "                     std::uint8_t *pSource,\n";
+    if (pUsesSnow) {
+        *pStream << "                     std::uint8_t *pSnow,\n";
+    }
+    *pStream
+    << "                     std::uint64_t *pPrevious,\n"
+    << "                     std::uint64_t *pIngress,\n"
+    << "                     std::uint64_t *pCarry,\n"
+    << "                     std::uint64_t *pWandererA,\n"
+    << "                     std::uint64_t *pWandererB,\n"
+    << "                     std::uint64_t *pWandererC,\n"
+    << "                     std::uint64_t *pWandererD,\n"
+    << "                     std::uint64_t *pWandererE,\n"
+    << "                     std::uint64_t *pWandererF,\n"
+    << "                     std::uint64_t *pWandererG,\n"
+    << "                     std::uint64_t *pWandererH,\n"
+    << "                     std::uint64_t *pWandererI,\n"
+    << "                     std::uint64_t *pWandererJ,\n"
+    << "                     std::uint64_t *pWandererK)" << aSuffix;
+}
+
+void AppendArxSeedSignature(std::ostringstream *pStream,
+                            const std::string &pClassName,
+                            const std::string &pMethodName,
+                            const bool pDefinition,
+                            const bool pUsesNonce = true) {
+    if (pStream == nullptr) {
+        return;
+    }
+
+    const std::string aPrefix = pDefinition ?
+        ("void " + pClassName + "::") :
+        "    void ";
+    const std::string aSuffix = pDefinition ? " {\n" : " override;\n";
+    *pStream
+    << aPrefix << pMethodName << "(TwistWorkSpace *pWorkSpace,\n";
+    if (pUsesNonce) {
+        *pStream << "                     std::uint64_t pNonce,\n";
+    }
+    *pStream
+    << "                     std::uint8_t *pSource,\n"
+    << "                     std::uint64_t *pPrevious,\n"
+    << "                     std::uint64_t *pIngress,\n"
+    << "                     std::uint64_t *pCarry,\n"
+    << "                     std::uint64_t *pWandererA,\n"
+    << "                     std::uint64_t *pWandererB,\n"
+    << "                     std::uint64_t *pWandererC,\n"
+    << "                     std::uint64_t *pWandererD,\n"
+    << "                     std::uint64_t *pWandererE,\n"
+    << "                     std::uint64_t *pWandererF,\n"
+    << "                     std::uint64_t *pWandererG,\n"
+    << "                     std::uint64_t *pWandererH,\n"
+    << "                     std::uint64_t *pWandererI,\n"
+    << "                     std::uint64_t *pWandererJ,\n"
+    << "                     std::uint64_t *pWandererK)" << aSuffix;
+}
+
+void AppendArxTwistSignature(std::ostringstream *pStream,
+                             const std::string &pClassName,
+                             const std::string &pMethodName,
+                             const bool pDefinition,
+                             const bool pUsesNonce) {
+    AppendArxSeedSignature(pStream, pClassName, pMethodName, pDefinition, pUsesNonce);
+}
+
+bool ExportArxCompanionFiles(const std::string &pRoot,
+                             const std::string &pClassName,
+                             std::string *pError) {
+    const std::string aArxClassName = pClassName + "_Arx";
+    const std::string aHeaderPath = FileIO::Join(pRoot, aArxClassName + ".hpp");
+    const std::string aCppPath = FileIO::Join(pRoot, aArxClassName + ".cpp");
+
+    TwistProgramBranch aBranchKDF_A_A;
+    if (!BuildExportArxKDF_A_ABranch(&aBranchKDF_A_A, pError)) {
+        return false;
+    }
+    TwistProgramBranch aBranchKDF_A_B;
+    if (!BuildExportArxKDF_A_BBranch(&aBranchKDF_A_B, pError)) {
+        return false;
+    }
+    TwistProgramBranch aBranchKDF_A_C;
+    if (!BuildExportArxKDF_A_CBranch(&aBranchKDF_A_C, pError)) {
+        return false;
+    }
+    TwistProgramBranch aBranchKDF_A_D;
+    if (!BuildExportArxKDF_A_DBranch(&aBranchKDF_A_D, pError)) {
+        return false;
+    }
+    TwistProgramBranch aBranchKDF_B_A;
+    if (!BuildExportArxKDF_B_ABranch(&aBranchKDF_B_A, pError)) {
+        return false;
+    }
+    TwistProgramBranch aBranchKDF_B_B;
+    if (!BuildExportArxKDF_B_BBranch(&aBranchKDF_B_B, pError)) {
+        return false;
+    }
+    TwistProgramBranch aBranchKDF_B_C;
+    if (!BuildExportArxKDF_B_CBranch(&aBranchKDF_B_C, pError)) {
+        return false;
+    }
+    TwistProgramBranch aBranchSeed_A;
+    if (!BuildExportArxSeed_ABranch(&aBranchSeed_A, pError)) {
+        return false;
+    }
+    TwistProgramBranch aBranchSeed_B;
+    if (!BuildExportArxSeed_BBranch(&aBranchSeed_B, pError)) {
+        return false;
+    }
+    TwistProgramBranch aBranchSeed_C;
+    if (!BuildExportArxSeed_CBranch(&aBranchSeed_C, pError)) {
+        return false;
+    }
+    TwistProgramBranch aBranchSeed_D;
+    if (!BuildExportArxSeed_DBranch(&aBranchSeed_D, pError)) {
+        return false;
+    }
+    TwistProgramBranch aBranchTwist_A;
+    if (!BuildExportArxTwist_ABranch(&aBranchTwist_A, pError)) {
+        return false;
+    }
+    TwistProgramBranch aBranchTwist_B;
+    if (!BuildExportArxTwist_BBranch(&aBranchTwist_B, pError)) {
+        return false;
+    }
+    TwistProgramBranch aBranchTwist_C;
+    if (!BuildExportArxTwist_CBranch(&aBranchTwist_C, pError)) {
+        return false;
+    }
+
+    std::ostringstream aHeader;
+    aHeader << "#pragma once\n"
+    << "\n"
+    << "#include \"TwistExpander.hpp\"\n"
+    << "\n"
+    << "class " << aArxClassName << " : public TwistExpanderArx {\n"
+    << "public:\n";
+    AppendArxKDFSignature(&aHeader, aArxClassName, "KDF_A_A", false, true);
+    AppendArxKDFSignature(&aHeader, aArxClassName, "KDF_A_B", false, false);
+    AppendArxKDFSignature(&aHeader, aArxClassName, "KDF_A_C", false, false);
+    AppendArxKDFSignature(&aHeader, aArxClassName, "KDF_A_D", false, false);
+    AppendArxKDFSignature(&aHeader, aArxClassName, "KDF_B_A", false, false);
+    AppendArxKDFSignature(&aHeader, aArxClassName, "KDF_B_B", false, false);
+    AppendArxKDFSignature(&aHeader, aArxClassName, "KDF_B_C", false, false);
+    AppendArxSeedSignature(&aHeader, aArxClassName, "Seed_A", false);
+    AppendArxSeedSignature(&aHeader, aArxClassName, "Seed_B", false);
+    AppendArxSeedSignature(&aHeader, aArxClassName, "Seed_C", false);
+    AppendArxSeedSignature(&aHeader, aArxClassName, "Seed_D", false);
+    AppendArxTwistSignature(&aHeader, aArxClassName, "Twist_A", false, false);
+    AppendArxTwistSignature(&aHeader, aArxClassName, "Twist_B", false, false);
+    AppendArxTwistSignature(&aHeader, aArxClassName, "Twist_C", false, false);
+    aHeader << "};\n";
+
+    std::ostringstream aCpp;
+    aCpp << "#include \"" << aArxClassName << ".hpp\"\n"
+    << "#include \"TwistFunctional.hpp\"\n"
+    << "#include \"TwistMix32.hpp\"\n"
+    << "#include \"TwistMix64.hpp\"\n"
+    << "\n"
+    << "#include <cstdint>\n"
+    << "\n";
+    AppendArxKDFSignature(&aCpp, aArxClassName, "KDF_A_A", true, true);
+    if (!AppendBranchBody(aBranchKDF_A_A, true, &aCpp, pError)) {
+        return false;
+    }
+    aCpp << "}\n"
+    << "\n";
+    AppendArxKDFSignature(&aCpp, aArxClassName, "KDF_A_B", true, false);
+    if (!AppendBranchBody(aBranchKDF_A_B, true, &aCpp, pError)) {
+        return false;
+    }
+    aCpp << "}\n";
+    aCpp << "\n";
+    AppendArxKDFSignature(&aCpp, aArxClassName, "KDF_A_C", true, false);
+    if (!AppendBranchBody(aBranchKDF_A_C, true, &aCpp, pError)) {
+        return false;
+    }
+    aCpp << "}\n";
+    aCpp << "\n";
+    AppendArxKDFSignature(&aCpp, aArxClassName, "KDF_A_D", true, false);
+    if (!AppendBranchBody(aBranchKDF_A_D, true, &aCpp, pError)) {
+        return false;
+    }
+    aCpp << "}\n";
+    aCpp << "\n";
+    AppendArxKDFSignature(&aCpp, aArxClassName, "KDF_B_A", true, false);
+    if (!AppendBranchBody(aBranchKDF_B_A, true, &aCpp, pError)) {
+        return false;
+    }
+    aCpp << "}\n";
+    aCpp << "\n";
+    AppendArxKDFSignature(&aCpp, aArxClassName, "KDF_B_B", true, false);
+    if (!AppendBranchBody(aBranchKDF_B_B, true, &aCpp, pError)) {
+        return false;
+    }
+    aCpp << "}\n";
+    aCpp << "\n";
+    AppendArxKDFSignature(&aCpp, aArxClassName, "KDF_B_C", true, false);
+    if (!AppendBranchBody(aBranchKDF_B_C, true, &aCpp, pError)) {
+        return false;
+    }
+    aCpp << "}\n";
+    aCpp << "\n";
+    AppendArxSeedSignature(&aCpp, aArxClassName, "Seed_A", true);
+    if (!AppendBranchBody(aBranchSeed_A, false, &aCpp, pError)) {
+        return false;
+    }
+    aCpp << "}\n";
+    aCpp << "\n";
+    AppendArxSeedSignature(&aCpp, aArxClassName, "Seed_B", true);
+    if (!AppendBranchBody(aBranchSeed_B, false, &aCpp, pError)) {
+        return false;
+    }
+    aCpp << "}\n";
+    aCpp << "\n";
+    AppendArxSeedSignature(&aCpp, aArxClassName, "Seed_C", true);
+    if (!AppendBranchBody(aBranchSeed_C, false, &aCpp, pError)) {
+        return false;
+    }
+    aCpp << "}\n";
+    aCpp << "\n";
+    AppendArxSeedSignature(&aCpp, aArxClassName, "Seed_D", true);
+    if (!AppendBranchBody(aBranchSeed_D, false, &aCpp, pError)) {
+        return false;
+    }
+    aCpp << "}\n";
+    aCpp << "\n";
+    AppendArxTwistSignature(&aCpp, aArxClassName, "Twist_A", true, false);
+    if (!AppendBranchBody(aBranchTwist_A, false, &aCpp, pError)) {
+        return false;
+    }
+    aCpp << "}\n";
+    aCpp << "\n";
+    AppendArxTwistSignature(&aCpp, aArxClassName, "Twist_B", true, false);
+    if (!AppendBranchBody(aBranchTwist_B, false, &aCpp, pError)) {
+        return false;
+    }
+    aCpp << "}\n";
+    aCpp << "\n";
+    AppendArxTwistSignature(&aCpp, aArxClassName, "Twist_C", true, false);
+    if (!AppendBranchBody(aBranchTwist_C, false, &aCpp, pError)) {
+        return false;
+    }
+    aCpp << "}\n";
+
+    if (!SaveTextFile(aHeaderPath, aHeader.str(), pError)) {
+        return false;
+    }
+    if (!SaveTextFile(aCppPath, aCpp.str(), pError)) {
+        return false;
+    }
+    return true;
+}
+
+class GArx {
+public:
+    bool Bake(const std::string &pRoot,
+              const std::string &pClassName,
+              std::string *pError) {
+        mArxClassName = pClassName + "_Arx";
+        mKDF_A_A.mBatchName = "kdf_a_loop_a";
+        mKDF_A_A.mStartLine = "// GSeedRunKDF_A_A kdf_a_loop_a (start)";
+        mKDF_A_A.mEndLine = "// GSeedRunKDF_A_A kdf_a_loop_a (end)";
+        mKDF_A_A.mClassName = mArxClassName;
+        mKDF_A_A.mUsesSnow = true;
+        mKDF_A_A.mMethodName = "KDF_A_A";
+        mKDF_A_A.mInstanceName = "aArx";
+        mKDF_A_A.mTitle = "KDF_A_A kdf_a_loop_a";
+        mKDF_A_A.mReadFrom = "source, snow";
+        mKDF_A_A.mTempStorage = "work_a, work_b";
+        mKDF_A_A.mWriteTo = "expand_a, expand_b, expand_c, expand_d";
+
+        mKDF_A_B.mBatchName = "kdf_a_loop_b";
+        mKDF_A_B.mStartLine = "// GSeedRunKDF_A_B kdf_a_loop_b (start)";
+        mKDF_A_B.mEndLine = "// GSeedRunKDF_A_B kdf_a_loop_b (end)";
+        mKDF_A_B.mClassName = mArxClassName;
+        mKDF_A_B.mMethodName = "KDF_A_B";
+        mKDF_A_B.mInstanceName = "aKDF_A_BArx";
+        mKDF_A_B.mTitle = "KDF_A_B kdf_a_loop_b";
+        mKDF_A_B.mReadFrom = "expand_a, expand_b, expand_c, expand_d";
+        mKDF_A_B.mTempStorage.clear();
+        mKDF_A_B.mWriteTo = "operation_a, operation_b, operation_c, operation_d";
+
+        mKDF_A_C.mBatchName = "kdf_a_loop_c";
+        mKDF_A_C.mStartLine = "// GSeedRunKDF_A_C kdf_a_loop_c (start)";
+        mKDF_A_C.mEndLine = "// GSeedRunKDF_A_C kdf_a_loop_c (end)";
+        mKDF_A_C.mClassName = mArxClassName;
+        mKDF_A_C.mMethodName = "KDF_A_C";
+        mKDF_A_C.mInstanceName = "aKDF_A_CArx";
+        mKDF_A_C.mTitle = "KDF_A_C kdf_a_loop_c";
+        mKDF_A_C.mReadFrom = "operation_a, operation_b, operation_c, operation_d";
+        mKDF_A_C.mTempStorage.clear();
+        mKDF_A_C.mWriteTo = "work_a, work_b, work_c, work_d";
+
+        mKDF_A_D.mBatchName = "kdf_a_loop_d";
+        mKDF_A_D.mStartLine = "// GSeedRunKDF_A_D kdf_a_loop_d (start)";
+        mKDF_A_D.mEndLine = "// GSeedRunKDF_A_D kdf_a_loop_d (end)";
+        mKDF_A_D.mClassName = mArxClassName;
+        mKDF_A_D.mMethodName = "KDF_A_D";
+        mKDF_A_D.mInstanceName = "aKDF_A_DArx";
+        mKDF_A_D.mTitle = "KDF_A_D kdf_a_loop_d";
+        mKDF_A_D.mReadFrom = "expand_a, expand_b, expand_c, expand_d";
+        mKDF_A_D.mTempStorage.clear();
+        mKDF_A_D.mWriteTo = "work_a, work_b, work_c, work_d";
+
+        mKDF_B_A.mBatchName = "kdf_b_loop_a";
+        mKDF_B_A.mStartLine = "// GSeedRunKDF_B_A kdf_b_loop_a (start)";
+        mKDF_B_A.mEndLine = "// GSeedRunKDF_B_A kdf_b_loop_a (end)";
+        mKDF_B_A.mClassName = mArxClassName;
+        mKDF_B_A.mMethodName = "KDF_B_A";
+        mKDF_B_A.mInstanceName = "aKDF_B_AArx";
+        mKDF_B_A.mTitle = "KDF_B_A kdf_b_loop_a";
+        mKDF_B_A.mReadFrom = "work_a, work_b, work_c, work_d";
+        mKDF_B_A.mTempStorage.clear();
+        mKDF_B_A.mWriteTo = "expand_a, expand_b, expand_c, expand_d";
+
+        mKDF_B_B.mBatchName = "kdf_b_loop_b";
+        mKDF_B_B.mStartLine = "// GSeedRunKDF_B_B kdf_b_loop_b (start)";
+        mKDF_B_B.mEndLine = "// GSeedRunKDF_B_B kdf_b_loop_b (end)";
+        mKDF_B_B.mClassName = mArxClassName;
+        mKDF_B_B.mMethodName = "KDF_B_B";
+        mKDF_B_B.mInstanceName = "aKDF_B_BArx";
+        mKDF_B_B.mTitle = "KDF_B_B kdf_b_loop_b";
+        mKDF_B_B.mReadFrom = "expand_a, expand_b, expand_c, expand_d";
+        mKDF_B_B.mTempStorage.clear();
+        mKDF_B_B.mWriteTo = "operation_a, operation_b, operation_c, operation_d";
+
+        mKDF_B_C.mBatchName = "kdf_b_loop_c";
+        mKDF_B_C.mStartLine = "// GSeedRunKDF_B_C kdf_b_loop_c (start)";
+        mKDF_B_C.mEndLine = "// GSeedRunKDF_B_C kdf_b_loop_c (end)";
+        mKDF_B_C.mClassName = mArxClassName;
+        mKDF_B_C.mMethodName = "KDF_B_C";
+        mKDF_B_C.mInstanceName = "aKDF_B_CArx";
+        mKDF_B_C.mTitle = "KDF_B_C kdf_b_loop_c";
+        mKDF_B_C.mReadFrom = "operation_a, operation_b, operation_c, operation_d";
+        mKDF_B_C.mTempStorage = "work_a, work_b";
+        mKDF_B_C.mWriteTo = "expand_a, expand_b, expand_c, expand_d";
+
+        mSeed_A.mKind = ArxCallKind::kSeed;
+        mSeed_A.mBatchName = "seed_loop_a";
+        mSeed_A.mStartLine = "// GSeedRunSeed_A seed_loop_a (start)";
+        mSeed_A.mEndLine = "// GSeedRunSeed_A seed_loop_a (end)";
+        mSeed_A.mClassName = mArxClassName;
+        mSeed_A.mMethodName = "Seed_A";
+        mSeed_A.mInstanceName = "aSeed_AArx";
+        mSeed_A.mTitle = "GSeedRunSeed_A seed_loop_a";
+        mSeed_A.mReadFrom = "source, key_box_a, key_box_b";
+        mSeed_A.mTempStorage.clear();
+        mSeed_A.mWriteTo = "expand_a, expand_b, expand_c, expand_d";
+
+        mSeed_B.mKind = ArxCallKind::kSeed;
+        mSeed_B.mBatchName = "seed_loop_b";
+        mSeed_B.mStartLine = "// GSeedRunSeed_B seed_loop_b (start)";
+        mSeed_B.mEndLine = "// GSeedRunSeed_B seed_loop_b (end)";
+        mSeed_B.mClassName = mArxClassName;
+        mSeed_B.mMethodName = "Seed_B";
+        mSeed_B.mInstanceName = "aSeed_BArx";
+        mSeed_B.mTitle = "GSeedRunSeed_B seed_loop_b";
+        mSeed_B.mReadFrom = "expand_a, expand_b, expand_c, expand_d";
+        mSeed_B.mTempStorage.clear();
+        mSeed_B.mWriteTo = "operation_a, operation_b, operation_c, operation_d";
+
+        mSeed_C.mKind = ArxCallKind::kSeed;
+        mSeed_C.mBatchName = "seed_loop_c";
+        mSeed_C.mStartLine = "// GSeedRunSeed_C seed_loop_c (start)";
+        mSeed_C.mEndLine = "// GSeedRunSeed_C seed_loop_c (end)";
+        mSeed_C.mClassName = mArxClassName;
+        mSeed_C.mMethodName = "Seed_C";
+        mSeed_C.mInstanceName = "aSeed_CArx";
+        mSeed_C.mTitle = "GSeedRunSeed_C seed_loop_c";
+        mSeed_C.mReadFrom = "operation_a, operation_b, operation_c, operation_d";
+        mSeed_C.mTempStorage.clear();
+        mSeed_C.mWriteTo = "work_a, work_b, work_c, work_d";
+
+        mSeed_D.mKind = ArxCallKind::kSeed;
+        mSeed_D.mBatchName = "seed_loop_d";
+        mSeed_D.mStartLine = "// GSeedRunSeed_D seed_loop_d (start)";
+        mSeed_D.mEndLine = "// GSeedRunSeed_D seed_loop_d (end)";
+        mSeed_D.mClassName = mArxClassName;
+        mSeed_D.mMethodName = "Seed_D";
+        mSeed_D.mInstanceName = "aSeed_DArx";
+        mSeed_D.mTitle = "GSeedRunSeed_D seed_loop_d";
+        mSeed_D.mReadFrom = "expand_a, expand_b, expand_c, expand_d";
+        mSeed_D.mTempStorage.clear();
+        mSeed_D.mWriteTo = "work_a, work_b, work_c, work_d";
+
+        mTwist_A.mKind = ArxCallKind::kTwist;
+        mTwist_A.mUsesNonce = false;
+        mTwist_A.mBatchName = "twist_loop_a";
+        mTwist_A.mStartLine = "// GTwistRunTwist_A twist_loop_a (start)";
+        mTwist_A.mEndLine = "// GTwistRunTwist_A twist_loop_a (end)";
+        mTwist_A.mClassName = mArxClassName;
+        mTwist_A.mMethodName = "Twist_A";
+        mTwist_A.mInstanceName = "aTwist_AArx";
+        mTwist_A.mTitle = "GTwistRunTwist_A twist_loop_a";
+        mTwist_A.mReadFrom = "source, key_box_a, key_box_b";
+        mTwist_A.mTempStorage.clear();
+        mTwist_A.mWriteTo = "expand_a, expand_b, expand_c, expand_d";
+
+        mTwist_B.mKind = ArxCallKind::kTwist;
+        mTwist_B.mUsesNonce = false;
+        mTwist_B.mBatchName = "twist_loop_b";
+        mTwist_B.mStartLine = "// GTwistRunTwist_B twist_loop_b (start)";
+        mTwist_B.mEndLine = "// GTwistRunTwist_B twist_loop_b (end)";
+        mTwist_B.mClassName = mArxClassName;
+        mTwist_B.mMethodName = "Twist_B";
+        mTwist_B.mInstanceName = "aTwist_BArx";
+        mTwist_B.mTitle = "GTwistRunTwist_B twist_loop_b";
+        mTwist_B.mReadFrom = "expand_a, expand_b, expand_c, expand_d";
+        mTwist_B.mTempStorage.clear();
+        mTwist_B.mWriteTo = "operation_a, operation_b, operation_c, operation_d";
+
+        mTwist_C.mKind = ArxCallKind::kTwist;
+        mTwist_C.mUsesNonce = false;
+        mTwist_C.mBatchName = "twist_loop_c";
+        mTwist_C.mStartLine = "// GTwistRunTwist_C twist_loop_c (start)";
+        mTwist_C.mEndLine = "// GTwistRunTwist_C twist_loop_c (end)";
+        mTwist_C.mClassName = mArxClassName;
+        mTwist_C.mMethodName = "Twist_C";
+        mTwist_C.mInstanceName = "aTwist_CArx";
+        mTwist_C.mTitle = "GTwistRunTwist_C twist_loop_c";
+        mTwist_C.mReadFrom = "operation_a, operation_b, operation_c, operation_d";
+        mTwist_C.mTempStorage.clear();
+        mTwist_C.mWriteTo = "work_a, work_b, work_c, work_d";
+
+        return ExportArxCompanionFiles(pRoot, pClassName, pError);
+    }
+
+    const ArxCallExport* KDF_A_A() const {
+        return &mKDF_A_A;
+    }
+
+    const ArxCallExport* KDF_A_B() const {
+        return &mKDF_A_B;
+    }
+
+    const ArxCallExport* KDF_A_C() const {
+        return &mKDF_A_C;
+    }
+
+    const ArxCallExport* KDF_A_D() const {
+        return &mKDF_A_D;
+    }
+
+    const ArxCallExport* KDF_B_A() const {
+        return &mKDF_B_A;
+    }
+
+    const ArxCallExport* KDF_B_B() const {
+        return &mKDF_B_B;
+    }
+
+    const ArxCallExport* KDF_B_C() const {
+        return &mKDF_B_C;
+    }
+
+    const ArxCallExport* Seed_A() const {
+        return &mSeed_A;
+    }
+
+    const ArxCallExport* Seed_B() const {
+        return &mSeed_B;
+    }
+
+    const ArxCallExport* Seed_C() const {
+        return &mSeed_C;
+    }
+
+    const ArxCallExport* Seed_D() const {
+        return &mSeed_D;
+    }
+
+    const ArxCallExport* Twist_A() const {
+        return &mTwist_A;
+    }
+
+    const ArxCallExport* Twist_B() const {
+        return &mTwist_B;
+    }
+
+    const ArxCallExport* Twist_C() const {
+        return &mTwist_C;
+    }
+
+    const std::string& ClassName() const {
+        return mArxClassName;
+    }
+
+private:
+    std::string mArxClassName;
+    ArxCallExport mKDF_A_A;
+    ArxCallExport mKDF_A_B;
+    ArxCallExport mKDF_A_C;
+    ArxCallExport mKDF_A_D;
+    ArxCallExport mKDF_B_A;
+    ArxCallExport mKDF_B_B;
+    ArxCallExport mKDF_B_C;
+    ArxCallExport mSeed_A;
+    ArxCallExport mSeed_B;
+    ArxCallExport mSeed_C;
+    ArxCallExport mSeed_D;
+    ArxCallExport mTwist_A;
+    ArxCallExport mTwist_B;
+    ArxCallExport mTwist_C;
+};
 
 [[maybe_unused]] JsonValue BranchToJsonValue(const TwistProgramBranch &pBranch,
                                              std::string *pError) {
@@ -1358,6 +3189,10 @@ bool GTwistExpander::ExportCPPProjectRoot(const std::string &pRootPath,
     
     const std::string aHeaderPath = FileIO::Join(aRoot, aClassName + ".hpp");
     const std::string aCppPath = FileIO::Join(aRoot, aClassName + ".cpp");
+    GArx aArx;
+    if (!aArx.Bake(aRoot, aClassName, pError)) {
+        return false;
+    }
     
     GTwistExpander aSnapshot = *this;
     aSnapshot.RefreshTablePointers();
@@ -1368,6 +3203,7 @@ bool GTwistExpander::ExportCPPProjectRoot(const std::string &pRootPath,
     aHeader << "#pragma once\n"
     << "\n"
     << "#include \"TwistExpander.hpp\"\n"
+    << "#include \"" << aArx.ClassName() << ".hpp\"\n"
     << "\n"
     << "class " << aClassName << " : public TwistExpander {\n"
     << "public:\n"
@@ -1417,6 +3253,7 @@ bool GTwistExpander::ExportCPPProjectRoot(const std::string &pRootPath,
     
     std::ostringstream aCpp;
     aCpp << "#include \"" << aClassName << ".hpp\"\n"
+    << "#include \"TwistDiffuse.hpp\"\n"
     << "#include \"TwistFunctional.hpp\"\n"
     << "#include \"TwistIndexShuffle.hpp\"\n"
     << "#include \"TwistMix32.hpp\"\n"
@@ -1459,7 +3296,7 @@ bool GTwistExpander::ExportCPPProjectRoot(const std::string &pRootPath,
     << "    TwistWorkSpace *pWorkSpace = mWorkspace;\n"
     << "    if ((pWorkSpace == nullptr) || (mSource == nullptr) ||\n"
     << "        (pConstants == nullptr) || (pDomainSaltSet == nullptr)) { return; }\n";
-    if (!AppendBranchBody(aKDF_ABranch, true, &aCpp, pError)) {
+    if (!AppendBranchBody(aKDF_ABranch, true, &aCpp, pError, aArx.KDF_A_A(), aArx.KDF_A_B(), aArx.KDF_A_C(), aArx.KDF_A_D())) {
         return false;
     }
     aCpp << "}\n"
@@ -1471,7 +3308,7 @@ bool GTwistExpander::ExportCPPProjectRoot(const std::string &pRootPath,
     << "    TwistWorkSpace *pWorkSpace = mWorkspace;\n"
     << "    if ((pWorkSpace == nullptr) || (mSource == nullptr) ||\n"
     << "        (pConstants == nullptr) || (pDomainSaltSet == nullptr)) { return; }\n";
-    if (!AppendBranchBody(aKDF_BBranch, true, &aCpp, pError)) {
+    if (!AppendBranchBody(aKDF_BBranch, true, &aCpp, pError, aArx.KDF_B_A(), aArx.KDF_B_B(), aArx.KDF_B_C())) {
         return false;
     }
     aCpp << "}\n"
@@ -1485,7 +3322,7 @@ bool GTwistExpander::ExportCPPProjectRoot(const std::string &pRootPath,
     << "                                 std::uint8_t *pDestination) {\n"
     << "    TwistExpander::Seed(pWorkSpace, pFarmSalt, pNonce, pSourceInput, pPassword, pPasswordByteLength, pDestination);\n"
     << "    if ((pWorkSpace == nullptr) || (pFarmSalt == nullptr) || (pSourceInput == nullptr)) { return; }\n";
-    if (!AppendBranchBody(aSnapshot.mSeed, false, &aCpp, pError)) {
+    if (!AppendBranchBody(aSnapshot.mSeed, false, &aCpp, pError, aArx.Seed_A(), aArx.Seed_B(), aArx.Seed_C(), aArx.Seed_D())) {
         return false;
     }
     aCpp << "}\n"
@@ -1498,7 +3335,7 @@ bool GTwistExpander::ExportCPPProjectRoot(const std::string &pRootPath,
     << "                                       std::uint8_t *pDestination) {\n"
     << "    TwistExpander::TwistBlock(pWorkSpace, pNonce, pSourceInput, pBlockIndex, pBlockCount, pDestination);\n"
     << "    if ((pWorkSpace == nullptr) || (pDestination == nullptr)) { return; }\n";
-    if (!AppendBranchBody(aSnapshot.mTwister, false, &aCpp, pError)) {
+    if (!AppendBranchBody(aSnapshot.mTwister, false, &aCpp, pError, aArx.Twist_A(), aArx.Twist_B(), aArx.Twist_C())) {
         return false;
     }
     aCpp << "    std::memcpy(pDestination, pWorkSpace->mWorkLaneD, S_BLOCK);\n"

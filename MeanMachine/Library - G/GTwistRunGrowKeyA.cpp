@@ -236,6 +236,7 @@ bool GTwistRunGrowKeyA::Plan(std::string *pErrorMessage) {
 
 bool GTwistRunGrowKeyA::Build(TwistProgramBranch &pBranch,
                               std::string *pErrorMessage) {
+    pBranch.AddLine("// GTwistRunGrowKeyA PhaseD salts");
     if (!mExpandAStage.Build(pBranch, pErrorMessage)) {
         return false;
     }
@@ -285,6 +286,7 @@ bool GTwistRunGrowKeyB::Plan(std::string *pErrorMessage) {
 
 bool GTwistRunGrowKeyB::Build(TwistProgramBranch &pBranch,
                               std::string *pErrorMessage) {
+    pBranch.AddLine("// GTwistRunGrowKeyB PhaseD salts");
     if (!mExpandAStage.Build(pBranch, pErrorMessage)) {
         return false;
     }

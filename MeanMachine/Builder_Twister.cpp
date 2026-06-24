@@ -160,7 +160,6 @@ bool Builder_Twister::Build(GTwistExpander *pExpander,
         aDiffusionA.mUseDomainWords = false;
         
         GBatch aBatchDiffusion;
-        aBatchDiffusion.AddComment(std::string("seedur") + "-matrix-diffusion: yeah");
         
         if (!GRunMatrixDiffusion::Bake(aDiffusionA, &aBatchDiffusion, pErrorMessage)) {
             if (pErrorMessage != nullptr) {

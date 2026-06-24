@@ -1,6 +1,7 @@
 #pragma once
 
 #include "TwistExpander.hpp"
+#include "TwistExpander_Unholy_060_Arx.hpp"
 
 class TwistExpander_Unholy_060 : public TwistExpander {
 public:

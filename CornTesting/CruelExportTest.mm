@@ -972,8 +972,12 @@ static BOOL CompareKeyBoxB(const char *pLabel,
     std::vector<std::uint8_t> aCppBytes;
     const std::string aCppPath = FileIO::Join(aExportRoot, "TwistExpander_EmitShape.cpp");
     XCTAssertTrue(FileIO::Load(aCppPath, aCppBytes), "Failed to load emitted cpp file.");
+    std::vector<std::uint8_t> aHppBytes;
+    const std::string aHppPath = FileIO::Join(aExportRoot, "TwistExpander_EmitShape.hpp");
+    XCTAssertTrue(FileIO::Load(aHppPath, aHppBytes), "Failed to load emitted hpp file.");
 
     const std::string aCpp(aCppBytes.begin(), aCppBytes.end());
+    const std::string aHpp(aHppBytes.begin(), aHppBytes.end());
     XCTAssertTrue(aCpp.find("std::uint64_t aPrevious = 0; std::uint64_t aIngress = 0; std::uint64_t aCarry = 0;") != std::string::npos,
                   "Expected grouped core scalar declarations.");
     if (aCpp.find("std::uint64_t aOrbiterA") != std::string::npos) {
@@ -1006,10 +1010,54 @@ static BOOL CompareKeyBoxB(const char *pLabel,
                   "Expected exported KDF_B function.");
     XCTAssertTrue(aCpp.find("void TwistExpander_EmitShape::KDF(std::uint64_t") == std::string::npos,
                   "Expected exported KDF wrapper to be omitted.");
-    XCTAssertTrue(aCpp.find("GSeedRunKDF_A_A kdf_a_loop_a (start)") != std::string::npos,
-                  "Expected generated KDF-A loop marker to include the stage name.");
-    XCTAssertTrue(aCpp.find("GSeedRunKDF_B_A kdf_b_loop_a (start)") != std::string::npos,
-                  "Expected generated KDF-B loop marker to include the stage name.");
+    XCTAssertTrue(aCpp.find("KDF_A_A kdf_a_loop_a:") != std::string::npos,
+                  "Expected generated KDF-A ARX call marker.");
+    XCTAssertTrue(aCpp.find("KDF_A_B kdf_a_loop_b:") != std::string::npos,
+                  "Expected generated KDF-A/B ARX call marker.");
+    XCTAssertTrue(aCpp.find("KDF_A_C kdf_a_loop_c:") != std::string::npos,
+                  "Expected generated KDF-A/C ARX call marker.");
+    XCTAssertTrue(aCpp.find("KDF_A_D kdf_a_loop_d:") != std::string::npos,
+                  "Expected generated KDF-A/D ARX call marker.");
+    XCTAssertTrue(aCpp.find("KDF_B_A kdf_b_loop_a:") != std::string::npos,
+                  "Expected generated KDF-B/A ARX call marker.");
+    XCTAssertTrue(aCpp.find("KDF_B_B kdf_b_loop_b:") != std::string::npos,
+                  "Expected generated KDF-B/B ARX call marker.");
+    XCTAssertTrue(aCpp.find("KDF_B_C kdf_b_loop_c:") != std::string::npos,
+                  "Expected generated KDF-B/C ARX call marker.");
+    XCTAssertTrue(aHpp.find("#include \"TwistExpander_EmitShape_Arx.hpp\"") != std::string::npos,
+                  "Expected KDF export header to include its ARX companion.");
+    XCTAssertTrue(aCpp.find("#include \"TwistExpander_EmitShape_Arx.hpp\"") == std::string::npos,
+                  "Expected KDF export cpp to get the ARX type through its header.");
+    XCTAssertTrue(aCpp.find("TwistExpander_EmitShape_Arx aArx;") != std::string::npos,
+                  "Expected KDF export to instantiate the ARX companion.");
+    XCTAssertTrue(aCpp.find("aArx.KDF_A_A(") != std::string::npos,
+                  "Expected KDF export to call the ARX companion instance.");
+    XCTAssertTrue(aCpp.find("aKDF_A_BArx.KDF_A_B(") != std::string::npos,
+                  "Expected KDF export to call the ARX companion for KDF_A_B.");
+    XCTAssertTrue(aCpp.find("aKDF_A_CArx.KDF_A_C(") != std::string::npos,
+                  "Expected KDF export to call the ARX companion for KDF_A_C.");
+    XCTAssertTrue(aCpp.find("aKDF_A_DArx.KDF_A_D(") != std::string::npos,
+                  "Expected KDF export to call the ARX companion for KDF_A_D.");
+    XCTAssertTrue(aCpp.find("aKDF_B_AArx.KDF_B_A(") != std::string::npos,
+                  "Expected KDF export to call the ARX companion for KDF_B_A.");
+    XCTAssertTrue(aCpp.find("aKDF_B_BArx.KDF_B_B(") != std::string::npos,
+                  "Expected KDF export to call the ARX companion for KDF_B_B.");
+    XCTAssertTrue(aCpp.find("aKDF_B_CArx.KDF_B_C(") != std::string::npos,
+                  "Expected KDF export to call the ARX companion for KDF_B_C.");
+    XCTAssertTrue(aCpp.find("GSeedRunKDF_A_A kdf_a_loop_a (start)") == std::string::npos,
+                  "Expected KDF export to omit the old inline KDF_A_A marker.");
+    XCTAssertTrue(aCpp.find("GSeedRunKDF_A_B kdf_a_loop_b (start)") == std::string::npos,
+                  "Expected KDF export to omit the old inline KDF_A_B marker.");
+    XCTAssertTrue(aCpp.find("GSeedRunKDF_A_C kdf_a_loop_c (start)") == std::string::npos,
+                  "Expected KDF export to omit the old inline KDF_A_C marker.");
+    XCTAssertTrue(aCpp.find("GSeedRunKDF_A_D kdf_a_loop_d (start)") == std::string::npos,
+                  "Expected KDF export to omit the old inline KDF_A_D marker.");
+    XCTAssertTrue(aCpp.find("GSeedRunKDF_B_A kdf_b_loop_a (start)") == std::string::npos,
+                  "Expected KDF export to omit the old inline KDF_B_A marker.");
+    XCTAssertTrue(aCpp.find("GSeedRunKDF_B_B kdf_b_loop_b (start)") == std::string::npos,
+                  "Expected KDF export to omit the old inline KDF_B_B marker.");
+    XCTAssertTrue(aCpp.find("GSeedRunKDF_B_C kdf_b_loop_c (start)") == std::string::npos,
+                  "Expected KDF export to omit the old inline KDF_B_C marker.");
     XCTAssertTrue(aCpp.find("aDestination = mDest") == std::string::npos,
                   "KDF export should not declare a destination alias.");
     XCTAssertTrue(aCpp.find("std::uint8_t *mSource") == std::string::npos,
@@ -1037,17 +1085,17 @@ static BOOL CompareKeyBoxB(const char *pLabel,
     XCTAssertTrue(aKDFText.find("aMaskLaneA") == std::string::npos,
                   "KDF export should not declare mask lane aliases.");
 
-    const std::size_t aLoop = aCpp.find("        for (std::size_t aIndex");
+    const std::size_t aFirstArxCall = aCpp.find("    aArx.KDF_A_A(");
     const std::size_t aPreviousInit = aCpp.find("        aPrevious = ");
     const std::size_t aCarryInit = aCpp.find("        aCarry = ");
     const std::size_t aWandererKInit = aCpp.find("        aWandererK = ");
-    XCTAssertTrue(aLoop != std::string::npos, "Expected generated KDF loop.");
-    XCTAssertTrue((aPreviousInit != std::string::npos) && (aPreviousInit < aLoop),
-                  "Expected aPrevious to be randomized before the KDF loop.");
-    XCTAssertTrue((aCarryInit != std::string::npos) && (aCarryInit < aLoop),
-                  "Expected aCarry to be randomized before the KDF loop.");
-    XCTAssertTrue((aWandererKInit != std::string::npos) && (aWandererKInit < aLoop),
-                  "Expected all wanderers to be randomized before the KDF loop.");
+    XCTAssertTrue(aFirstArxCall != std::string::npos, "Expected generated KDF ARX call.");
+    XCTAssertTrue((aPreviousInit != std::string::npos) && (aPreviousInit < aFirstArxCall),
+                  "Expected aPrevious to be randomized before the KDF ARX call.");
+    XCTAssertTrue((aCarryInit != std::string::npos) && (aCarryInit < aFirstArxCall),
+                  "Expected aCarry to be randomized before the KDF ARX call.");
+    XCTAssertTrue((aWandererKInit != std::string::npos) && (aWandererKInit < aFirstArxCall),
+                  "Expected all wanderers to be randomized before the KDF ARX call.");
 }
 
 - (void)testSeederExportPreservesSetupBeforeKDF {
@@ -1145,9 +1193,17 @@ static BOOL CompareKeyBoxB(const char *pLabel,
     std::vector<std::uint8_t> aHppBytes;
     const std::string aHppPath = FileIO::Join(aExportRoot, "TwistExpander_TwisterStageNames.hpp");
     XCTAssertTrue(FileIO::Load(aHppPath, aHppBytes), "Failed to load emitted hpp file.");
+    std::vector<std::uint8_t> aArxCppBytes;
+    const std::string aArxCppPath = FileIO::Join(aExportRoot, "TwistExpander_TwisterStageNames_Arx.cpp");
+    XCTAssertTrue(FileIO::Load(aArxCppPath, aArxCppBytes), "Failed to load emitted ARX cpp file.");
+    std::vector<std::uint8_t> aArxHppBytes;
+    const std::string aArxHppPath = FileIO::Join(aExportRoot, "TwistExpander_TwisterStageNames_Arx.hpp");
+    XCTAssertTrue(FileIO::Load(aArxHppPath, aArxHppBytes), "Failed to load emitted ARX hpp file.");
 
     const std::string aCpp(aCppBytes.begin(), aCppBytes.end());
     const std::string aHpp(aHppBytes.begin(), aHppBytes.end());
+    const std::string aArxCpp(aArxCppBytes.begin(), aArxCppBytes.end());
+    const std::string aArxHpp(aArxHppBytes.begin(), aArxHppBytes.end());
     auto CountText = [](const std::string &pText, const std::string &pNeedle) -> std::size_t {
         std::size_t aCount = 0U;
         std::size_t aOffset = pText.find(pNeedle);
@@ -1161,12 +1217,160 @@ static BOOL CompareKeyBoxB(const char *pLabel,
                   "Expected exported TwistBlock declaration to include block index.");
     XCTAssertTrue(aHpp.find("std::size_t pBlockCount") != std::string::npos,
                   "Expected exported TwistBlock declaration to include block count.");
+    XCTAssertTrue(aArxHpp.find("class TwistExpander_TwisterStageNames_Arx : public TwistExpanderArx") != std::string::npos,
+                  "Expected exported ARX companion class.");
+    XCTAssertTrue(aArxHpp.find("void KDF_A_A(") != std::string::npos,
+                  "Expected exported ARX companion KDF_A_A declaration.");
+    XCTAssertTrue(aArxHpp.find("void KDF_A_B(") != std::string::npos,
+                  "Expected exported ARX companion KDF_A_B declaration.");
+    XCTAssertTrue(aArxHpp.find("void KDF_A_C(") != std::string::npos,
+                  "Expected exported ARX companion KDF_A_C declaration.");
+    XCTAssertTrue(aArxHpp.find("void KDF_A_D(") != std::string::npos,
+                  "Expected exported ARX companion KDF_A_D declaration.");
+    XCTAssertTrue(aArxHpp.find("void KDF_B_A(") != std::string::npos,
+                  "Expected exported ARX companion KDF_B_A declaration.");
+    XCTAssertTrue(aArxHpp.find("void KDF_B_B(") != std::string::npos,
+                  "Expected exported ARX companion KDF_B_B declaration.");
+    XCTAssertTrue(aArxHpp.find("void KDF_B_C(") != std::string::npos,
+                  "Expected exported ARX companion KDF_B_C declaration.");
+    XCTAssertTrue(aArxHpp.find("void Seed_A(") != std::string::npos,
+                  "Expected exported ARX companion Seed_A declaration.");
+    XCTAssertTrue(aArxHpp.find("void Seed_B(") != std::string::npos,
+                  "Expected exported ARX companion Seed_B declaration.");
+    XCTAssertTrue(aArxHpp.find("void Seed_C(") != std::string::npos,
+                  "Expected exported ARX companion Seed_C declaration.");
+    XCTAssertTrue(aArxHpp.find("void Seed_D(") != std::string::npos,
+                  "Expected exported ARX companion Seed_D declaration.");
+    XCTAssertTrue(aArxHpp.find("void Twist_A(") != std::string::npos,
+                  "Expected exported ARX companion Twist_A declaration.");
+    XCTAssertTrue(aArxHpp.find("void Twist_B(") != std::string::npos,
+                  "Expected exported ARX companion Twist_B declaration.");
+    XCTAssertTrue(aArxHpp.find("override") != std::string::npos,
+                  "Expected exported ARX companion to override the base interface.");
+    XCTAssertTrue(aArxCpp.find("void TwistExpander_TwisterStageNames_Arx::KDF_A_A(") != std::string::npos,
+                  "Expected exported ARX companion KDF_A_A definition.");
+    XCTAssertTrue(aArxCpp.find("void TwistExpander_TwisterStageNames_Arx::KDF_A_B(") != std::string::npos,
+                  "Expected exported ARX companion KDF_A_B definition.");
+    XCTAssertTrue(aArxCpp.find("void TwistExpander_TwisterStageNames_Arx::KDF_A_C(") != std::string::npos,
+                  "Expected exported ARX companion KDF_A_C definition.");
+    XCTAssertTrue(aArxCpp.find("void TwistExpander_TwisterStageNames_Arx::KDF_A_D(") != std::string::npos,
+                  "Expected exported ARX companion KDF_A_D definition.");
+    XCTAssertTrue(aArxCpp.find("void TwistExpander_TwisterStageNames_Arx::KDF_B_A(") != std::string::npos,
+                  "Expected exported ARX companion KDF_B_A definition.");
+    XCTAssertTrue(aArxCpp.find("void TwistExpander_TwisterStageNames_Arx::KDF_B_B(") != std::string::npos,
+                  "Expected exported ARX companion KDF_B_B definition.");
+    XCTAssertTrue(aArxCpp.find("void TwistExpander_TwisterStageNames_Arx::KDF_B_C(") != std::string::npos,
+                  "Expected exported ARX companion KDF_B_C definition.");
+    XCTAssertTrue(aArxCpp.find("void TwistExpander_TwisterStageNames_Arx::Seed_A(") != std::string::npos,
+                  "Expected exported ARX companion Seed_A definition.");
+    XCTAssertTrue(aArxCpp.find("void TwistExpander_TwisterStageNames_Arx::Seed_B(") != std::string::npos,
+                  "Expected exported ARX companion Seed_B definition.");
+    XCTAssertTrue(aArxCpp.find("void TwistExpander_TwisterStageNames_Arx::Seed_C(") != std::string::npos,
+                  "Expected exported ARX companion Seed_C definition.");
+    XCTAssertTrue(aArxCpp.find("void TwistExpander_TwisterStageNames_Arx::Seed_D(") != std::string::npos,
+                  "Expected exported ARX companion Seed_D definition.");
+    XCTAssertTrue(aArxCpp.find("void TwistExpander_TwisterStageNames_Arx::Twist_A(") != std::string::npos,
+                  "Expected exported ARX companion Twist_A definition.");
+    XCTAssertTrue(aArxCpp.find("void TwistExpander_TwisterStageNames_Arx::Twist_B(") != std::string::npos,
+                  "Expected exported ARX companion Twist_B definition.");
+    XCTAssertTrue(aArxCpp.find("std::uint64_t aWandererA = *pWandererA;") != std::string::npos,
+                  "Expected KDF_A_A to load wanderer state from pointer.");
+    XCTAssertTrue(aArxCpp.find("*pWandererA = aWandererA;") != std::string::npos,
+                  "Expected KDF_A_A to store wanderer state back to pointer.");
+    XCTAssertTrue(aArxCpp.find("std::uint64_t aIngress = *pIngress;") != std::string::npos,
+                  "Expected KDF_A_A to load ingress state from pointer.");
+    XCTAssertTrue(aArxCpp.find("*pIngress = aIngress;") != std::string::npos,
+                  "Expected KDF_A_A to store ingress state back to pointer.");
+    XCTAssertTrue(aArxCpp.find("nullptr") == std::string::npos,
+                  "Expected exported ARX helper to omit defensive null checks.");
+    XCTAssertTrue(CountText(aArxCpp, "// kdf_a_loop_a loop ") == 6U,
+                  "Expected exported KDF_A_A ARX companion to contain six 11-orbiter loops.");
+    XCTAssertTrue(CountText(aArxCpp, "// kdf_a_loop_b loop ") == 4U,
+                  "Expected exported KDF_A_B ARX companion to contain four loops.");
+    XCTAssertTrue(CountText(aArxCpp, "// kdf_a_loop_c loop ") == 4U,
+                  "Expected exported KDF_A_C ARX companion to contain four loops.");
+    XCTAssertTrue(CountText(aArxCpp, "// kdf_a_loop_d loop ") == 4U,
+                  "Expected exported KDF_A_D ARX companion to contain four loops.");
+    XCTAssertTrue(CountText(aArxCpp, "// kdf_b_loop_a loop ") == 4U,
+                  "Expected exported KDF_B_A ARX companion to contain four loops.");
+    XCTAssertTrue(CountText(aArxCpp, "// kdf_b_loop_b loop ") == 4U,
+                  "Expected exported KDF_B_B ARX companion to contain four loops.");
+    XCTAssertTrue(CountText(aArxCpp, "// kdf_b_loop_c loop ") == 6U,
+                  "Expected exported KDF_B_C ARX companion to contain six loops.");
+    XCTAssertTrue(CountText(aArxCpp, "// seed_loop_a loop ") == 4U,
+                  "Expected exported Seed_A ARX companion to contain four loops.");
+    XCTAssertTrue(CountText(aArxCpp, "// seed_loop_b loop ") == 4U,
+                  "Expected exported Seed_B ARX companion to contain four loops.");
+    XCTAssertTrue(CountText(aArxCpp, "// seed_loop_c loop ") == 4U,
+                  "Expected exported Seed_C ARX companion to contain four loops.");
+    XCTAssertTrue(CountText(aArxCpp, "// seed_loop_d loop ") == 4U,
+                  "Expected exported Seed_D ARX companion to contain four loops.");
+    XCTAssertTrue(CountText(aArxCpp, "// twist_loop_a loop ") == 4U,
+                  "Expected exported Twist_A ARX companion to contain four loops.");
+    XCTAssertTrue(CountText(aArxCpp, "// twist_loop_b loop ") == 4U,
+                  "Expected exported Twist_B ARX companion to contain four loops.");
+    XCTAssertTrue(aArxCpp.find("// read from: mSource, mSnow") != std::string::npos &&
+                  aArxCpp.find("// write to: aWorkLaneA") != std::string::npos,
+                  "Expected KDF_A_A first loop to read source/snow and write work A.");
+    XCTAssertTrue(aArxCpp.find("// read from: mSource, mSnow, aWorkLaneA") != std::string::npos &&
+                  aArxCpp.find("// write to: aWorkLaneB") != std::string::npos,
+                  "Expected KDF_A_A second loop to include work A and write work B.");
+    XCTAssertTrue(aArxCpp.find("// read from: mSource, mSnow, aWorkLaneA, aWorkLaneB") != std::string::npos &&
+                  aArxCpp.find("// write to: aExpandLaneA") != std::string::npos,
+                  "Expected KDF_A_A third loop to write expansion A.");
+    XCTAssertTrue(aArxCpp.find("// read from: mSnow, aWorkLaneA, aWorkLaneB, aExpandLaneA") != std::string::npos &&
+                  aArxCpp.find("// write to: aExpandLaneB") != std::string::npos,
+                  "Expected KDF_A_A fourth loop to write expansion B.");
+    XCTAssertTrue(aArxCpp.find("// read from: aWorkLaneA, aWorkLaneB, aExpandLaneA, aExpandLaneB") != std::string::npos &&
+                  aArxCpp.find("// write to: aExpandLaneC") != std::string::npos,
+                  "Expected KDF_A_A fifth loop to write expansion C.");
+    XCTAssertTrue(aArxCpp.find("// read from: aWorkLaneB, aExpandLaneA, aExpandLaneB, aExpandLaneC") != std::string::npos &&
+                  aArxCpp.find("// write to: aExpandLaneD") != std::string::npos,
+                  "Expected KDF_A_A sixth loop to write expansion D.");
+    XCTAssertTrue(aArxCpp.find("// read from: aExpandLaneD, aExpandLaneC, aExpandLaneB, aExpandLaneA") != std::string::npos &&
+                  aArxCpp.find("// write to: aOperationLaneA") != std::string::npos,
+                  "Expected KDF_A_B first loop to read expansion lanes and write operation A.");
+    XCTAssertTrue(aArxCpp.find("// read from: aOperationLaneD, aOperationLaneC, aOperationLaneB, aOperationLaneA") != std::string::npos &&
+                  aArxCpp.find("// write to: aWorkLaneA") != std::string::npos,
+                  "Expected KDF_A_C first loop to read operation lanes and write work A.");
+    XCTAssertTrue(aArxCpp.find("// read from: aExpandLaneD, aExpandLaneC, aExpandLaneB, aExpandLaneA") != std::string::npos &&
+                  aArxCpp.find("// write to: aWorkLaneA") != std::string::npos,
+                  "Expected KDF_A_D first loop to read expansion lanes and write work A.");
+    XCTAssertTrue(aArxCpp.find("// read from: aWorkLaneD, aWorkLaneC, aWorkLaneB, aWorkLaneA") != std::string::npos &&
+                  aArxCpp.find("// write to: aExpandLaneA") != std::string::npos,
+                  "Expected KDF_B_A first loop to read work lanes and write expansion A.");
+    XCTAssertTrue(aArxCpp.find("// read from: aExpandLaneD, aExpandLaneC, aExpandLaneB, aExpandLaneA") != std::string::npos &&
+                  aArxCpp.find("// write to: aOperationLaneA") != std::string::npos,
+                  "Expected KDF_B_B first loop to read expansion lanes and write operation A.");
+    XCTAssertTrue(aArxCpp.find("// read from: aOperationLaneD, aOperationLaneC, aOperationLaneB, aOperationLaneA") != std::string::npos &&
+                  aArxCpp.find("// write to: aWorkLaneA") != std::string::npos,
+                  "Expected KDF_B_C first loop to read operation lanes and write work A.");
+    XCTAssertTrue(aArxCpp.find("// read from: aWorkLaneA, aOperationLaneD, aOperationLaneC, aOperationLaneB") != std::string::npos &&
+                  aArxCpp.find("// write to: aWorkLaneB") != std::string::npos,
+                  "Expected KDF_B_C second loop to use work A and write work B.");
+    XCTAssertTrue(aArxCpp.find("// read from: aWorkLaneB, aWorkLaneA, aOperationLaneD, aOperationLaneC") != std::string::npos &&
+                  aArxCpp.find("// write to: aExpandLaneA") != std::string::npos,
+                  "Expected KDF_B_C third loop to use work lanes and write expansion A.");
+    XCTAssertTrue(aArxCpp.find("// GTwistRunTwist_A twist_loop_a (start)") != std::string::npos,
+                  "Expected Twist_A body marker in the ARX companion.");
+    XCTAssertTrue(aArxCpp.find("// read from: mSource, aKeyBoxUnrolledA, aKeyBoxUnrolledB") != std::string::npos &&
+                  aArxCpp.find("// write to: aExpandLaneA") != std::string::npos,
+                  "Expected Twist_A first loop to read source/key boxes and write expansion A.");
+    XCTAssertTrue(aArxCpp.find("// GTwistRunTwist_B twist_loop_b (start)") != std::string::npos,
+                  "Expected Twist_B body marker in the ARX companion.");
+    XCTAssertTrue(aArxCpp.find("// read from: aExpandLaneD, aExpandLaneC, aExpandLaneB, aExpandLaneA") != std::string::npos &&
+                  aArxCpp.find("// write to: aOperationLaneA") != std::string::npos,
+                  "Expected Twist_B first loop to read expansion lanes and write operation A.");
     XCTAssertTrue(aCpp.find("std::size_t pBlockIndex") != std::string::npos,
                   "Expected exported TwistBlock definition to include block index.");
     XCTAssertTrue(aCpp.find("std::size_t pBlockCount") != std::string::npos,
                   "Expected exported TwistBlock definition to include block count.");
-    const std::size_t aTwistA = aCpp.find("GTwistRunTwist_A twist_loop_a (start)");
-    const std::size_t aTwistB = aCpp.find("GTwistRunTwist_B twist_loop_b (start)");
+    XCTAssertTrue(aHpp.find("#include \"TwistExpander_TwisterStageNames_Arx.hpp\"") != std::string::npos,
+                  "Expected exported twister header to include its ARX companion.");
+    XCTAssertTrue(aCpp.find("#include \"TwistExpander_TwisterStageNames_Arx.hpp\"") == std::string::npos,
+                  "Expected exported twister cpp to get the ARX type through its header.");
+    const std::size_t aTwistA = aCpp.find("GTwistRunTwist_A twist_loop_a:");
+    const std::size_t aTwistB = aCpp.find("GTwistRunTwist_B twist_loop_b:");
     const std::size_t aTwistC = aCpp.find("GTwistRunTwist_C twist_loop_c (start)");
     const std::size_t aTwistD = aCpp.find("GTwistRunTwist_D twist_loop_d (start)");
     XCTAssertTrue(aTwistA != std::string::npos, "Expected named twist loop A marker.");
@@ -1177,12 +1381,18 @@ static BOOL CompareKeyBoxB(const char *pLabel,
                   "Expected twist loops in A, B, C, D order.");
     XCTAssertTrue(aCpp.find("GTwistRunTwist15") == std::string::npos,
                   "Export should not mention numbered twist stages.");
-    XCTAssertTrue(aCpp.find("GTwistRunTwist_A twist_loop_a lane group") != std::string::npos,
-                  "Expected twist loop A lane group comment.");
-    XCTAssertTrue(aCpp.find("// read from: mSource, aKeyBoxUnrolledA, aKeyBoxUnrolledB") != std::string::npos,
-                  "Expected per-loop read lane comment.");
-    XCTAssertTrue(aCpp.find("// write to: aExpandLaneA") != std::string::npos,
-                  "Expected per-loop write lane comment.");
+    XCTAssertTrue(aCpp.find("aTwist_AArx.Twist_A(") != std::string::npos,
+                  "Expected TwistBlock to call the ARX helper for twist loop A.");
+    XCTAssertTrue(aCpp.find("aTwist_BArx.Twist_B(") != std::string::npos,
+                  "Expected TwistBlock to call the ARX helper for twist loop B.");
+    XCTAssertTrue(aCpp.find("GTwistRunTwist_A twist_loop_a (start)") == std::string::npos,
+                  "Expected full twist loop A body to live in the ARX companion.");
+    XCTAssertTrue(aCpp.find("GTwistRunTwist_B twist_loop_b (start)") == std::string::npos,
+                  "Expected full twist loop B body to live in the ARX companion.");
+    XCTAssertTrue(aArxCpp.find("GTwistRunTwist_A twist_loop_a lane group") != std::string::npos,
+                  "Expected twist loop A lane group comment in the ARX companion.");
+    XCTAssertTrue(aArxCpp.find("GTwistRunTwist_B twist_loop_b lane group") != std::string::npos,
+                  "Expected twist loop B lane group comment in the ARX companion.");
     XCTAssertTrue(aCpp.find("// write to: aKeyRowWriteA (^=)") != std::string::npos,
                   "Expected grow-key xor write lane comment.");
     XCTAssertTrue(CountText(aCpp, "TwistSquash::Squash") == 1U,
@@ -1291,35 +1501,72 @@ static BOOL CompareKeyBoxB(const char *pLabel,
     std::vector<std::uint8_t> aCppBytes;
     const std::string aCppPath = FileIO::Join(aExportRoot, "TwistExpander_SeederSeedPhases.cpp");
     XCTAssertTrue(FileIO::Load(aCppPath, aCppBytes), "Failed to load emitted cpp file.");
+    std::vector<std::uint8_t> aArxCppBytes;
+    const std::string aArxCppPath = FileIO::Join(aExportRoot, "TwistExpander_SeederSeedPhases_Arx.cpp");
+    XCTAssertTrue(FileIO::Load(aArxCppPath, aArxCppBytes), "Failed to load emitted ARX cpp file.");
 
     const std::string aCpp(aCppBytes.begin(), aCppBytes.end());
-    const std::size_t aSeedLoopA = aCpp.find("seed_loop_a (start)");
-    const std::size_t aSeedLoopB = aCpp.find("seed_loop_b (start)");
-    const std::size_t aSeedLoopC = aCpp.find("seed_loop_c (start)");
-    const std::size_t aSeedLoopD = aCpp.find("seed_loop_d (start)");
+    const std::string aArxCpp(aArxCppBytes.begin(), aArxCppBytes.end());
+    const std::size_t aSeedLoopA = aCpp.find("GSeedRunSeed_A seed_loop_a:");
+    const std::size_t aSeedLoopB = aCpp.find("GSeedRunSeed_B seed_loop_b:");
+    const std::size_t aSeedLoopC = aCpp.find("GSeedRunSeed_C seed_loop_c:");
+    const std::size_t aSeedLoopD = aCpp.find("GSeedRunSeed_D seed_loop_d:");
     XCTAssertTrue(aSeedLoopA != std::string::npos, "Expected seed loop A.");
     XCTAssertTrue(aSeedLoopB != std::string::npos, "Expected seed loop B.");
     XCTAssertTrue(aSeedLoopC != std::string::npos, "Expected seed loop C.");
     XCTAssertTrue(aSeedLoopD != std::string::npos, "Expected seed loop D.");
     XCTAssertTrue(aSeedLoopA < aSeedLoopB && aSeedLoopB < aSeedLoopC && aSeedLoopC < aSeedLoopD,
                   "Expected seed loops in phase order A, B, C, D.");
-    XCTAssertTrue(aCpp.find("GSeedRunSeed_A seed_loop_a (start)") != std::string::npos,
-                  "Expected generated seed loop A marker to include the stage name.");
-    XCTAssertTrue(aCpp.find("GSeedRunSeed_B seed_loop_b (start)") != std::string::npos,
-                  "Expected generated seed loop B marker to include the stage name.");
-    XCTAssertTrue(aCpp.find("GSeedRunSeed_C seed_loop_c (start)") != std::string::npos,
-                  "Expected generated seed loop C marker to include the stage name.");
-    XCTAssertTrue(aCpp.find("GSeedRunSeed_D seed_loop_d (start)") != std::string::npos,
-                  "Expected generated seed loop D marker to include the stage name.");
+    
+    const std::size_t aSeedCallA = aCpp.find("aSeed_AArx.Seed_A(");
+    const std::size_t aSeedCallB = aCpp.find("aSeed_BArx.Seed_B(");
+    const std::size_t aSeedCallC = aCpp.find("aSeed_CArx.Seed_C(");
+    const std::size_t aSeedCallD = aCpp.find("aSeed_DArx.Seed_D(");
+    XCTAssertTrue(aSeedCallA != std::string::npos && aSeedCallB != std::string::npos &&
+                  aSeedCallC != std::string::npos && aSeedCallD != std::string::npos,
+                  "Expected seed loops to call the ARX helper.");
+    XCTAssertTrue(aSeedCallA < aSeedCallB && aSeedCallB < aSeedCallC && aSeedCallC < aSeedCallD,
+                  "Expected seed ARX calls in A, B, C, D order.");
+    XCTAssertTrue(aCpp.find("GSeedRunSeed_A seed_loop_a (start)") == std::string::npos &&
+                  aCpp.find("GSeedRunSeed_B seed_loop_b (start)") == std::string::npos &&
+                  aCpp.find("GSeedRunSeed_C seed_loop_c (start)") == std::string::npos &&
+                  aCpp.find("GSeedRunSeed_D seed_loop_d (start)") == std::string::npos,
+                  "Expected full seed loop bodies to live in the ARX companion.");
+    
+    const std::size_t aArxSeedLoopA = aArxCpp.find("GSeedRunSeed_A seed_loop_a (start)");
+    const std::size_t aArxSeedLoopB = aArxCpp.find("GSeedRunSeed_B seed_loop_b (start)");
+    const std::size_t aArxSeedLoopC = aArxCpp.find("GSeedRunSeed_C seed_loop_c (start)");
+    const std::size_t aArxSeedLoopD = aArxCpp.find("GSeedRunSeed_D seed_loop_d (start)");
+    XCTAssertTrue(aArxSeedLoopA != std::string::npos, "Expected generated seed loop A marker to include the stage name.");
+    XCTAssertTrue(aArxSeedLoopB != std::string::npos, "Expected generated seed loop B marker to include the stage name.");
+    XCTAssertTrue(aArxSeedLoopC != std::string::npos, "Expected generated seed loop C marker to include the stage name.");
+    XCTAssertTrue(aArxSeedLoopD != std::string::npos, "Expected generated seed loop D marker to include the stage name.");
+    XCTAssertTrue(aArxSeedLoopA < aArxSeedLoopB && aArxSeedLoopB < aArxSeedLoopC && aArxSeedLoopC < aArxSeedLoopD,
+                  "Expected ARX seed loop bodies in phase order A, B, C, D.");
 
-    const std::size_t aNonceDecl = aCpp.find("[[maybe_unused]] std::uint64_t aNonceByteA = ((pNonce >> 0U) & 0xFFULL);");
-    XCTAssertTrue(aNonceDecl != std::string::npos, "Expected seed nonce byte declarations.");
-    XCTAssertTrue(aNonceDecl < aSeedLoopA, "Expected seed nonces to be declared before the first seed loop.");
+    const std::size_t aSeedMethodA = aArxCpp.find("void TwistExpander_SeederSeedPhases_Arx::Seed_A(");
+    const std::size_t aSeedMethodB = aArxCpp.find("void TwistExpander_SeederSeedPhases_Arx::Seed_B(");
+    const std::size_t aSeedMethodC = aArxCpp.find("void TwistExpander_SeederSeedPhases_Arx::Seed_C(");
+    const std::size_t aSeedMethodD = aArxCpp.find("void TwistExpander_SeederSeedPhases_Arx::Seed_D(");
+    XCTAssertTrue(aSeedMethodA != std::string::npos && aSeedMethodB != std::string::npos &&
+                  aSeedMethodC != std::string::npos && aSeedMethodD != std::string::npos,
+                  "Expected all seed ARX helper methods.");
+    if (aSeedMethodA == std::string::npos || aSeedMethodB == std::string::npos ||
+        aSeedMethodC == std::string::npos || aSeedMethodD == std::string::npos) {
+        return;
+    }
+    XCTAssertTrue(aSeedMethodA < aSeedMethodB && aSeedMethodB < aSeedMethodC && aSeedMethodC < aSeedMethodD,
+                  "Expected seed ARX helper methods in A, B, C, D order.");
 
-    const std::string aLoopAText = aCpp.substr(aSeedLoopA, aSeedLoopB - aSeedLoopA);
-    const std::string aLoopBText = aCpp.substr(aSeedLoopB, aSeedLoopC - aSeedLoopB);
-    const std::string aLoopCText = aCpp.substr(aSeedLoopC, aSeedLoopD - aSeedLoopC);
-    const std::string aLoopDText = aCpp.substr(aSeedLoopD);
+    const std::size_t aNonceDecl = aArxCpp.find("[[maybe_unused]] std::uint64_t aNonceByteA = ((pNonce >> 0U) & 0xFFULL);",
+                                                aSeedMethodA);
+    XCTAssertTrue(aNonceDecl != std::string::npos, "Expected Seed_A nonce byte declarations.");
+    XCTAssertTrue(aNonceDecl < aArxSeedLoopA, "Expected seed nonces to be declared before the first seed loop.");
+
+    const std::string aLoopAText = aArxCpp.substr(aSeedMethodA, aSeedMethodB - aSeedMethodA);
+    const std::string aLoopBText = aArxCpp.substr(aSeedMethodB, aSeedMethodC - aSeedMethodB);
+    const std::string aLoopCText = aArxCpp.substr(aSeedMethodC, aSeedMethodD - aSeedMethodC);
+    const std::string aLoopDText = aArxCpp.substr(aSeedMethodD);
     XCTAssertTrue(aLoopAText.find("aNonceByte") != std::string::npos,
                   "The first seed loop set should use nonce bytes.");
     XCTAssertTrue(aLoopBText.find("aNonceByte") == std::string::npos,
@@ -1348,10 +1595,10 @@ static BOOL CompareKeyBoxB(const char *pLabel,
                   aKDFPhaseG < aKDFPhaseH,
                   "Expected seed KDF phases in A, B, C, D, E, F, G, H order.");
 
-    const std::size_t aPhaseA = aCpp.find("pWorkSpace->mDomainBundle.mPhaseAConstants.mIngress;");
-    const std::size_t aPhaseB = aCpp.find("pWorkSpace->mDomainBundle.mPhaseBConstants.mIngress;");
-    const std::size_t aPhaseC = aCpp.find("pWorkSpace->mDomainBundle.mPhaseCConstants.mIngress;");
-    const std::size_t aPhaseD = aCpp.find("pWorkSpace->mDomainBundle.mPhaseDConstants.mIngress;");
+    const std::size_t aPhaseA = aArxCpp.find("pWorkSpace->mDomainBundle.mPhaseAConstants.mIngress;");
+    const std::size_t aPhaseB = aArxCpp.find("pWorkSpace->mDomainBundle.mPhaseBConstants.mIngress;");
+    const std::size_t aPhaseC = aArxCpp.find("pWorkSpace->mDomainBundle.mPhaseCConstants.mIngress;");
+    const std::size_t aPhaseD = aArxCpp.find("pWorkSpace->mDomainBundle.mPhaseDConstants.mIngress;");
     const std::size_t aMatrixC = aCpp.find("pWorkSpace->mDomainBundle.mPhaseCConstants.mMatrixSelectA;");
     XCTAssertTrue(aPhaseA != std::string::npos && aPhaseB != std::string::npos &&
                   aPhaseC != std::string::npos && aPhaseD != std::string::npos,
@@ -1418,7 +1665,7 @@ static BOOL CompareKeyBoxB(const char *pLabel,
     GTwistExpander aExpander;
     GBatch aBatch;
     std::vector<GStatement> aStatements;
-    aStatements.push_back(GStatement::RawLine("mMatrix.Dispatch(aOperationLaneA, aMatrixOperationIndex, aWorkLaneA, aMatrixLoadIndexA, aWorkLaneB, aMatrixStoreIndexA, static_cast<std::uint8_t>(aDomainWordMatrixUnrollA), static_cast<std::uint8_t>(aDomainWordMatrixArgA), static_cast<std::uint8_t>(aDomainWordMatrixArgB), static_cast<std::uint8_t>(aDomainWordMatrixArgC), static_cast<std::uint8_t>(aDomainWordMatrixArgD));"));
+    aStatements.push_back(GStatement::RawLine("mMatrix.Dispatch(aOperationLaneA, aMatrixOperationIndex, aWorkLaneA, aMatrixLoadIndexA, aWorkLaneB, aMatrixStoreIndexA, aDomainWordMatrixUnrollA, aDomainWordMatrixArgA, aDomainWordMatrixArgB, aDomainWordMatrixArgC, aDomainWordMatrixArgD);"));
     aBatch.CommitStatements(&aStatements);
 
     std::unordered_map<std::string, GRuntimeScalar> aVariables;
@@ -1495,7 +1742,7 @@ static BOOL CompareKeyBoxB(const char *pLabel,
     RunCase(64U, 64ULL, 2ULL);
 }
 
-- (void)testRunMatrixDiffusionExportsM88Dispatch {
+- (void)testRunMatrixDiffusionExportsTwistDiffuse {
     GRunMatrixDiffusionConfig aConfig;
     aConfig.mInputA = BufSymbol(TwistWorkSpaceSlot::kWorkLaneA);
     aConfig.mInputB = BufSymbol(TwistWorkSpaceSlot::kWorkLaneB);
@@ -1520,8 +1767,14 @@ static BOOL CompareKeyBoxB(const char *pLabel,
 
     const std::string aBlock = aRoundTrip.BuildCppScopeBlock(&aError, false);
     XCTAssertFalse(aBlock.empty(), "%s", aError.c_str());
-    XCTAssertTrue(aBlock.find("mMatrix.Dispatch(") != std::string::npos,
-                  "Matrix diffusion export should emit M88 dispatch calls.");
+    XCTAssertTrue(aBlock.find("TwistDiffuse::DiffuseWithDomainWords(") != std::string::npos,
+                  "Matrix diffusion export should emit the shared TwistDiffuse helper.");
+    XCTAssertTrue(aBlock.find("&mMatrix") != std::string::npos,
+                  "Matrix diffusion export should pass the expander matrix.");
+    XCTAssertTrue(aBlock.find("mMatrix.Dispatch(") == std::string::npos,
+                  "Matrix diffusion export should not re-expand M88 dispatch calls.");
+    XCTAssertTrue(aBlock.find("TwistIndexShuffle::") == std::string::npos,
+                  "Matrix diffusion export should keep index shuffle inside TwistDiffuse.");
     XCTAssertTrue(aBlock.find("aOperationLaneC") != std::string::npos,
                   "Matrix diffusion export should reference operation lane C.");
     XCTAssertTrue(aBlock.find("aOperationLaneD") != std::string::npos,
@@ -1542,6 +1795,10 @@ static BOOL CompareKeyBoxB(const char *pLabel,
                   "Matrix diffusion export should pass matrix arg domain word C.");
     XCTAssertTrue(aBlock.find("aDomainWordMatrixArgD") != std::string::npos,
                   "Matrix diffusion export should pass matrix arg domain word D.");
+    XCTAssertTrue(aBlock.find("static_cast<std::uint8_t>(aDomainWordMatrixUnrollA)") == std::string::npos,
+                  "Matrix diffusion export should not cast uint8_t domain words back to uint8_t.");
+    XCTAssertTrue(aBlock.find("static_cast<std::uint8_t>(aDomainWordMatrixArgA)") == std::string::npos,
+                  "Matrix diffusion export should not cast uint8_t domain words back to uint8_t.");
     XCTAssertTrue(aBlock.find("aExpandLaneA") != std::string::npos,
                   "Matrix diffusion export should reference output expansion lane A.");
     XCTAssertTrue(aBlock.find("aExpandLaneB") != std::string::npos,
@@ -1558,18 +1815,29 @@ static BOOL CompareKeyBoxB(const char *pLabel,
                   "Matrix diffusion export should describe matrix loop A reads.");
     XCTAssertTrue(aBlock.find("// write to: aExpandLaneA") != std::string::npos,
                   "Matrix diffusion export should describe matrix loop A write.");
-    XCTAssertTrue(aBlock.find("if (((aOperationLaneC[aWriteIndex] ^ aDomainWordMatrixSelectA) & 0x7E) > 62) {") != std::string::npos,
-                  "Matrix diffusion export should branch on operation lane C front byte.");
-    XCTAssertTrue(aBlock.find("if (((aOperationLaneD[aWriteIndex] ^ aDomainWordMatrixSelectB) & 0x7E) > 62) {") != std::string::npos,
-                  "Matrix diffusion export should branch on operation lane D front byte.");
-    XCTAssertTrue(aBlock.find("aReadIndexA") != std::string::npos,
-                  "Matrix diffusion export should use direct read index A.");
-    XCTAssertTrue(aBlock.find("aReadIndexB") != std::string::npos,
-                  "Matrix diffusion export should use direct read index B.");
+    XCTAssertTrue(aBlock.find("aMatrixDiffusionIndex") == std::string::npos,
+                  "Matrix diffusion export should not emit direct diffusion loops.");
+    XCTAssertTrue(aBlock.find("aReadIndexA") == std::string::npos,
+                  "Matrix diffusion export should keep read-index temporaries inside TwistDiffuse.");
+    XCTAssertTrue(aBlock.find("aReadIndexB") == std::string::npos,
+                  "Matrix diffusion export should keep read-index temporaries inside TwistDiffuse.");
     XCTAssertTrue(aBlock.find("aMatrixSlotA") == std::string::npos,
                   "Matrix diffusion export should not emit old matrix slot temporaries.");
     XCTAssertTrue(aBlock.find("aM88") == std::string::npos,
                   "Matrix diffusion export should not emit old M88 temporaries.");
+
+    aConfig.mUseDomainWords = false;
+    GBatch aNoDomainBatch;
+    XCTAssertTrue(GRunMatrixDiffusion::Bake(aConfig, &aNoDomainBatch, &aError),
+                  "%s", aError.c_str());
+    const std::string aNoDomainBlock = aNoDomainBatch.BuildCppScopeBlock(&aError, false);
+    XCTAssertFalse(aNoDomainBlock.empty(), "%s", aError.c_str());
+    XCTAssertTrue(aNoDomainBlock.find("TwistDiffuse::Diffuse(") != std::string::npos,
+                  "Matrix diffusion export should use the no-domain helper when requested.");
+    XCTAssertTrue(aNoDomainBlock.find("TwistDiffuse::DiffuseWithDomainWords(") == std::string::npos,
+                  "No-domain matrix diffusion export should not use domain-word helper.");
+    XCTAssertTrue(aNoDomainBlock.find("aDomainWordMatrix") == std::string::npos,
+                  "No-domain matrix diffusion export should not reference matrix domain words.");
 }
 
 - (void)testRunMatrixDiffusionPreservesCombinedHistogram {

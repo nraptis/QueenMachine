@@ -5,11 +5,6 @@
 //  Created by Nick Raptis on 5/19/26.
 //
 
-#ifndef LITE_MODE
-#define LITE_MODE 1
-#endif
-
-
 #include "GAX.hpp"
 #include "TwistArray.hpp"
 
@@ -409,18 +404,12 @@ bool GAXPL::BuildNonceExprMapForRole(GAXSKSaltRole pRole,
 
         (*pBehaviorIndex)++;
 
-        GExpr aNonceExpr;
-
-        if (aChoice.mUseFullNonce) {
-            aNonceExpr = GQuick::RotL64(GSymbol::Var(TwistVariable::kParamNonce), aBehavior.mRotation);
-        } else {
-            if (aChoice.mSymbol.IsInvalid()) {
-                SetError(pErrorMessage, "GAXPL::BuildNonceExprMapForRole found invalid nonce choice");
-                return false;
-            }
-
-            aNonceExpr = GQuick::RotL64(aChoice.mSymbol, aBehavior.mRotation);
+        if (aChoice.mSymbol.IsInvalid()) {
+            SetError(pErrorMessage, "GAXPL::BuildNonceExprMapForRole found invalid nonce choice");
+            return false;
         }
+
+        GExpr aNonceExpr = GQuick::RotL64(aChoice.mSymbol, aBehavior.mRotation);
         
 
         if (aNonceExpr.IsInvalid()) {
@@ -748,7 +737,7 @@ bool GAXPL::MakeSaltBehaviors(std::vector<SaltBehavior> *pResult,
     for (int i = 0; i < kBehaviorCount; ++i) {
         SaltBehavior aBehavior;
         aBehavior.mReversed = (aReverseFlags[i] != 0);
-        aBehavior.mOffset = aOffsets[i] + S_SALT * Random::Get(256);
+        aBehavior.mOffset = aOffsets[i];
         pResult->push_back(aBehavior);
     }
 
@@ -925,17 +914,9 @@ bool GAXPL::Bake(int pOffsetRangeLo,
         return false;
     }
     
-    //if (!GenerateStatements(pErrorMessage)) { return false; }
-    
-#if LITE_MODE
-    if (!GenerateStatementsLiteMode(pOffsetRangeLo, pOffsetRangeHi, pErrorMessage)) {
-        return false;
-    }
-#else
     if (!GenerateStatements(pOffsetRangeLo, pOffsetRangeHi, pErrorMessage)) {
         return false;
     }
-#endif
     
     return true;
 }
@@ -2040,7 +2021,6 @@ bool GAXPL::BuildNonceChoices(std::string *pErrorMessage) {
         NonceSymbolChoice aChoice;
         aChoice.mSymbol = pSymbol;
         aChoice.mPreferred = pPreferred;
-        aChoice.mUseFullNonce = false;
 
         mNonceChoices.push_back(aChoice);
         return true;
@@ -2074,25 +2054,6 @@ bool GAXPL::BuildNonceChoices(std::string *pErrorMessage) {
         if (!PushSymbolChoice(mNonceBytes[static_cast<std::size_t>(aIndex)], false)) {
             SetError(pErrorMessage, "GAXPL::BuildNonceChoices failed to reuse nonce");
             return false;
-        }
-    }
-
-    if (mUseFullNonce) {
-        std::vector<int> aFullNonceCandidateIndexes;
-
-        for (int i = 0; i < static_cast<int>(mNonceChoices.size()); ++i) {
-            if (!mNonceChoices[static_cast<std::size_t>(i)].mPreferred) {
-                aFullNonceCandidateIndexes.push_back(i);
-            }
-        }
-
-        if (!aFullNonceCandidateIndexes.empty()) {
-            Random::Shuffle(&aFullNonceCandidateIndexes);
-
-            const int aChoiceIndex = aFullNonceCandidateIndexes[0];
-
-            mNonceChoices[static_cast<std::size_t>(aChoiceIndex)].mUseFullNonce = true;
-            mNonceChoices[static_cast<std::size_t>(aChoiceIndex)].mSymbol = GSymbol();
         }
     }
 
@@ -2287,102 +2248,6 @@ bool GAXPL::GenerateStatements(int pOffsetRangeLo,
         aStatements.push_back(aDestStatement);
     }
     
-    mLoop->AddBody(&aStatements);
-    return true;
-}
-
-bool GAXPL::GenerateStatementsLiteMode(int pOffsetRangeLo,
-                                       int pOffsetRangeHi,
-                                       std::string *pErrorMessage) {
-    if (mLoop == nullptr) {
-        SetError(pErrorMessage, "GAXPL::GenerateStatementsLiteMode received null loop");
-        return false;
-    }
-
-    if (mSkeleton == nullptr) {
-        SetError(pErrorMessage, "GAXPL::GenerateStatementsLiteMode received null skeleton");
-        return false;
-    }
-
-    if (mDest.IsInvalid()) {
-        SetError(pErrorMessage, "GAXPL::GenerateStatementsLiteMode received invalid dest symbol");
-        return false;
-    }
-
-    std::vector<GStatement> aStatements;
-
-    bool aFoundIngressContextWord = false;
-
-    for (int aStatementIndex = 0;
-         aStatementIndex < static_cast<int>(mSkeleton->mStatements.size());
-         ++aStatementIndex) {
-
-        const GAXSKStatement &aSkeletonStatement =
-            mSkeleton->mStatements[static_cast<std::size_t>(aStatementIndex)];
-
-        if (aSkeletonStatement.mKind != GAXSKStatementKind::kContextWordAssign) {
-            continue;
-        }
-
-        if (aSkeletonStatement.mContextWord.mIsIngress == false) {
-            continue;
-        }
-
-        if (!GenerateContextWordStatement(pOffsetRangeLo,
-                                          pOffsetRangeHi,
-                                          aSkeletonStatement,
-                                          &aStatements,
-                                          pErrorMessage)) {
-            return false;
-        }
-
-        aFoundIngressContextWord = true;
-        break;
-    }
-
-    if (aFoundIngressContextWord == false) {
-        SetError(pErrorMessage,
-                 "GAXPL::GenerateStatementsLiteMode could not find ingress context word statement");
-        return false;
-    }
-
-    GSymbol aIndexSymbol = GSymbol::Var(TwistVariable::kIndex);
-    GSymbol aIngressSymbol = GSymbol::Var(TwistVariable::kIngress);
-
-    if (aIndexSymbol.IsInvalid()) {
-        SetError(pErrorMessage,
-                 "GAXPL::GenerateStatementsLiteMode produced invalid index symbol");
-        return false;
-    }
-
-    if (aIngressSymbol.IsInvalid()) {
-        SetError(pErrorMessage,
-                 "GAXPL::GenerateStatementsLiteMode produced invalid ingress symbol");
-        return false;
-    }
-
-    aStatements.push_back(GStatement::Comment(""));
-
-    if (mDestWriteInverted) {
-        GStatement aDestStatement =
-            GQuick::MakeAssignDestStatementInverted(
-                    mDest,
-                    aIndexSymbol,
-                    aIngressSymbol
-        );
-        aDestStatement.mAssignType = mDestAssignType;
-        aStatements.push_back(aDestStatement);
-    } else {
-        GStatement aDestStatement =
-            GQuick::MakeAssignDestStatement(
-                    mDest,
-                    aIndexSymbol,
-                    aIngressSymbol
-        );
-        aDestStatement.mAssignType = mDestAssignType;
-        aStatements.push_back(aDestStatement);
-    }
-
     mLoop->AddBody(&aStatements);
     return true;
 }

@@ -148,9 +148,7 @@ bool Builder_KDF::Build(GTwistExpander *pExpander,
         
         aDiffusionA.mUseDomainWords = true;
         
-        
         GBatch aBatchDiffusion;
-        aBatchDiffusion.AddComment(std::string("kdf-a") + "-matrix-diffusion: yeah");
         
         if (!GRunMatrixDiffusion::Bake(aDiffusionA, &aBatchDiffusion, pErrorMessage)) {
             if (pErrorMessage != nullptr) {

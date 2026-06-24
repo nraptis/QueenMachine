@@ -36,7 +36,6 @@ struct NonceBehavior {
 struct NonceSymbolChoice {
     GSymbol mSymbol;
     bool mPreferred = false;
-    bool mUseFullNonce = false;
 };
 
 class GAXPL {
@@ -195,10 +194,6 @@ public:
     bool                                                GenerateStatements(int pOffsetRangeLo,
                                                                            int pOffsetRangeHi,
                                                                            std::string *pErrorMessage);
-    
-    bool                                                GenerateStatementsLiteMode(int pOffsetRangeLo,
-                                                                                   int pOffsetRangeHi,
-                                                                                   std::string *pErrorMessage);
     
     bool                                                GeneratePreviousAssignStatement(const GAXSKStatement &pStatement,
                                                                                         std::vector<GStatement> *pStatements,

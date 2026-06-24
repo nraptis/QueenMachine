@@ -8,7 +8,6 @@
 #include "Random.hpp"
 
 #include <array>
-#include <sstream>
 
 namespace {
 
@@ -27,25 +26,6 @@ const std::array<TwistVariable, 13> kInitialRandomVariables = {
     TwistVariable::kWandererJ,
     TwistVariable::kWandererK,
 };
-
-const std::array<const char *, 8> kNonceVariableNames = {
-    "aNonceByteA",
-    "aNonceByteB",
-    "aNonceByteC",
-    "aNonceByteD",
-    "aNonceByteE",
-    "aNonceByteF",
-    "aNonceByteG",
-    "aNonceByteH",
-};
-
-std::string NonceLine(const GSymbol &pNonceSymbol,
-                      const int pIndex) {
-    std::ostringstream aLine;
-    aLine << "[[maybe_unused]] std::uint64_t " << pNonceSymbol.mName
-          << " = ((pNonce >> " << (pIndex * 8) << "U) & 0xFFULL);";
-    return aLine.str();
-}
 
 std::vector<TwistWorkSpaceSlot> ParamOrbiterAssignSalts() {
     using Slot = TwistWorkSpaceSlot;
@@ -110,10 +90,6 @@ GSeedRunStageConfig BaseConfig(const std::string &pStageName,
 
 void AddKDF_APrologue(TwistProgramBranch &pBranch) {
     pBranch.AddLine("// [kdf-a]");
-    for (int i = 0; i < 8; ++i) {
-        pBranch.AddLine(NonceLine(GSymbol::Var(kNonceVariableNames[static_cast<std::size_t>(i)]), i));
-    }
-
     pBranch.AddLine("std::uint64_t aDomainWordIngress = pConstants->mIngress;");
     pBranch.AddLine("std::uint64_t aDomainWordScatter = pConstants->mScatter;");
     pBranch.AddLine("std::uint64_t aDomainWordCross = pConstants->mCross;");
@@ -143,22 +119,30 @@ GSeedRunStageConfig MakeKDF_A_AConfig() {
     using Slot = TwistWorkSpaceSlot;
     GSeedRunStageConfig aConfig = BaseConfig("GSeedRunKDF_A_A",
                                              "kdf_a_loop_a",
-                                             GAXSFormat::kN7,
-                                             {2, 3, 4, 4});
+                                             GAXSFormat::kN11,
+                                             {2, 3, 4, 4, 4, 4});
     aConfig.mSlices = {
         {{Slot::kSource, Slot::kSnow},
+         Slot::kWorkLaneA,
+         false},
+        
+        {{Slot::kSource, Slot::kSnow, Slot::kWorkLaneA},
+         Slot::kWorkLaneB,
+         true},
+        
+        {{Slot::kSource, Slot::kSnow, Slot::kWorkLaneA, Slot::kWorkLaneB},
          Slot::kExpansionLaneA,
          false},
-
-        {{Slot::kExpansionLaneA, Slot::kSource, Slot::kSnow},
+        
+        {{Slot::kSnow, Slot::kWorkLaneA, Slot::kWorkLaneB, Slot::kExpansionLaneA},
          Slot::kExpansionLaneB,
          true},
-
-        {{Slot::kExpansionLaneB, Slot::kExpansionLaneA, Slot::kSource, Slot::kSnow},
+        
+        {{Slot::kWorkLaneA, Slot::kWorkLaneB, Slot::kExpansionLaneA, Slot::kExpansionLaneB},
          Slot::kExpansionLaneC,
          false},
-
-        {{Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA, Slot::kSource},
+        
+        {{Slot::kWorkLaneB, Slot::kExpansionLaneA, Slot::kExpansionLaneB, Slot::kExpansionLaneC},
          Slot::kExpansionLaneD,
          true},
     };
@@ -169,8 +153,11 @@ GSeedRunStageConfig MakeKDF_A_BConfig() {
     using Slot = TwistWorkSpaceSlot;
     GSeedRunStageConfig aConfig = BaseConfig("GSeedRunKDF_A_B",
                                              "kdf_a_loop_b",
-                                             GAXSFormat::kN11,
+                                             GAXSFormat::kN9,
                                              {4, 4, 4, 4});
+    aConfig.mIgnoreNonces = true;
+    aConfig.mHasDomainMix = false;
+    
     aConfig.mSlices = {
         {{Slot::kExpansionLaneD, Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA},
          Slot::kOperationLaneA,
@@ -195,8 +182,11 @@ GSeedRunStageConfig MakeKDF_A_CConfig() {
     using Slot = TwistWorkSpaceSlot;
     GSeedRunStageConfig aConfig = BaseConfig("GSeedRunKDF_A_C",
                                              "kdf_a_loop_c",
-                                             GAXSFormat::kN9,
+                                             GAXSFormat::kN5,
                                              {4, 4, 4, 4});
+    aConfig.mIgnoreNonces = true;
+    aConfig.mHasDomainMix = false;
+    
     aConfig.mSlices = {
         {{Slot::kOperationLaneD, Slot::kOperationLaneC, Slot::kOperationLaneB, Slot::kOperationLaneA},
          Slot::kWorkLaneA,
@@ -221,8 +211,11 @@ GSeedRunStageConfig MakeKDF_A_DConfig() {
     using Slot = TwistWorkSpaceSlot;
     GSeedRunStageConfig aConfig = BaseConfig("GSeedRunKDF_A_D",
                                              "kdf_a_loop_d",
-                                             GAXSFormat::kN5,
+                                             GAXSFormat::kN7,
                                              {4, 4, 4, 4});
+    aConfig.mIgnoreNonces = true;
+    aConfig.mHasDomainMix = false;
+    
     aConfig.mSlices = {
         {{Slot::kExpansionLaneD, Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA},
          Slot::kWorkLaneA,

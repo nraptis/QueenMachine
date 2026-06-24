@@ -57,7 +57,9 @@ bool IsRunningUnderXCTest() {
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
     (void)aNotification;
     
+    /*
 
+     if (IsRunningUnderXCTest() == false) {
     Candidate_A aCandidate;
 
     std::string aPasswordA = "cat";
@@ -69,8 +71,10 @@ bool IsRunningUnderXCTest() {
     auto aResult = aAva.DiffAB(aPasswordA, aPasswordB);
     aResult.PrintExtended("Candidate_A");
     aResult.PrintQuick("Candidate_A");
+     
+     }
     
-    
+    */
     
 
     /*

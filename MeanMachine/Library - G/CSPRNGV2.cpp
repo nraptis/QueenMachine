@@ -9,6 +9,29 @@
 #include "TwistArray.hpp"
 #include <cstdio>
 
+namespace {
+
+std::vector<GSymbol> MakeShuffledWanderers() {
+    std::vector<GSymbol> aWanderers = {
+        GSymbol::Var(TwistVariable::kWandererA),
+        GSymbol::Var(TwistVariable::kWandererB),
+        GSymbol::Var(TwistVariable::kWandererC),
+        GSymbol::Var(TwistVariable::kWandererD),
+        GSymbol::Var(TwistVariable::kWandererE),
+        GSymbol::Var(TwistVariable::kWandererF),
+        GSymbol::Var(TwistVariable::kWandererG),
+        GSymbol::Var(TwistVariable::kWandererH),
+        GSymbol::Var(TwistVariable::kWandererI),
+        GSymbol::Var(TwistVariable::kWandererJ),
+        GSymbol::Var(TwistVariable::kWandererK),
+    };
+
+    Random::Shuffle(&aWanderers);
+    return aWanderers;
+}
+
+} // namespace
+
 bool CSPRNGV2::Bake(bool pIsNonKDF,
                     TwistDomain pDomain,
                     std::vector<CSPRNGV2Slice> &pSlices,
@@ -37,13 +60,6 @@ bool CSPRNGV2::Bake(bool pIsNonKDF,
     
     GSymbol aIndex = GSymbol::Var(TwistVariable::kIndex);
     
-    GSymbol aWandererA = GSymbol::Var(TwistVariable::kWandererA); GSymbol aWandererB = GSymbol::Var(TwistVariable::kWandererB);
-    GSymbol aWandererC = GSymbol::Var(TwistVariable::kWandererC); GSymbol aWandererD = GSymbol::Var(TwistVariable::kWandererD);
-    GSymbol aWandererE = GSymbol::Var(TwistVariable::kWandererE); GSymbol aWandererF = GSymbol::Var(TwistVariable::kWandererF);
-    GSymbol aWandererG = GSymbol::Var(TwistVariable::kWandererG); GSymbol aWandererH = GSymbol::Var(TwistVariable::kWandererH);
-    GSymbol aWandererI = GSymbol::Var(TwistVariable::kWandererI); GSymbol aWandererJ = GSymbol::Var(TwistVariable::kWandererJ);
-    GSymbol aWandererK = GSymbol::Var(TwistVariable::kWandererK);
-    
     GSymbol aOrbiterA = GSymbol::Var(TwistVariable::kOrbiterA); GSymbol aOrbiterB = GSymbol::Var(TwistVariable::kOrbiterB);
     GSymbol aOrbiterC = GSymbol::Var(TwistVariable::kOrbiterC); GSymbol aOrbiterD = GSymbol::Var(TwistVariable::kOrbiterD);
     GSymbol aOrbiterE = GSymbol::Var(TwistVariable::kOrbiterE); GSymbol aOrbiterF = GSymbol::Var(TwistVariable::kOrbiterF);
@@ -51,10 +67,10 @@ bool CSPRNGV2::Bake(bool pIsNonKDF,
     GSymbol aOrbiterI = GSymbol::Var(TwistVariable::kOrbiterI); GSymbol aOrbiterJ = GSymbol::Var(TwistVariable::kOrbiterJ);
     GSymbol aOrbiterK = GSymbol::Var(TwistVariable::kOrbiterK);
     
-    GSymbol aNonceByteA = GSymbol::Var("aNonceByteA"); GSymbol aNonceByteB = GSymbol::Var("aNonceByteB");
-    GSymbol aNonceByteC = GSymbol::Var("aNonceByteC"); GSymbol aNonceByteD = GSymbol::Var("aNonceByteD");
-    GSymbol aNonceByteE = GSymbol::Var("aNonceByteE"); GSymbol aNonceByteF = GSymbol::Var("aNonceByteF");
-    GSymbol aNonceByteG = GSymbol::Var("aNonceByteG"); GSymbol aNonceByteH = GSymbol::Var("aNonceByteH");
+    GSymbol aNonceWordA = GSymbol::Var("aNonceWordA"); GSymbol aNonceWordB = GSymbol::Var("aNonceWordB");
+    GSymbol aNonceWordC = GSymbol::Var("aNonceWordC"); GSymbol aNonceWordD = GSymbol::Var("aNonceWordD");
+    GSymbol aNonceWordE = GSymbol::Var("aNonceWordE"); GSymbol aNonceWordF = GSymbol::Var("aNonceWordF");
+    GSymbol aNonceWordG = GSymbol::Var("aNonceWordG"); GSymbol aNonceWordH = GSymbol::Var("aNonceWordH");
     
     GSymbolCache aCacheOrbiterAssign;
     for (int aSaltIndex=0; aSaltIndex< pSaltsOrbiterAssign.size(); aSaltIndex++) {
@@ -95,8 +111,8 @@ bool CSPRNGV2::Bake(bool pIsNonKDF,
     for (int aSliceIndex=0; aSliceIndex<pSlices.size(); aSliceIndex++) {
         if (pSlices[aSliceIndex].mARXSkeleton.HasNonceSlots()) {
             pSlices[aSliceIndex].mNonceBytes = {
-                aNonceByteA, aNonceByteB, aNonceByteC, aNonceByteD,
-                aNonceByteE, aNonceByteF, aNonceByteG, aNonceByteH,
+                aNonceWordA, aNonceWordB, aNonceWordC, aNonceWordD,
+                aNonceWordE, aNonceWordF, aNonceWordG, aNonceWordH,
             };
             Random::Shuffle(&pSlices[aSliceIndex].mNonceBytes);
         } else {
@@ -111,12 +127,7 @@ bool CSPRNGV2::Bake(bool pIsNonKDF,
         };
         Random::Shuffle(&pSlices[aSliceIndex].mOrbiters);
         
-        pSlices[aSliceIndex].mWanderers = {
-            aWandererA, aWandererB, aWandererC, aWandererD,
-            aWandererE, aWandererF, aWandererG, aWandererH,
-            aWandererI, aWandererJ, aWandererK
-        };
-        Random::Shuffle(&pSlices[aSliceIndex].mWanderers);
+        pSlices[aSliceIndex].mWanderers = MakeShuffledWanderers();
     }
     
     bool NO_SHUFFLE = false;
@@ -142,8 +153,8 @@ bool CSPRNGV2::Bake(bool pIsNonKDF,
         for (int aSliceIndex=0; aSliceIndex<pSlices.size(); aSliceIndex++) {
             if (pSlices[aSliceIndex].mARXSkeleton.HasNonceSlots()) {
                 pSlices[aSliceIndex].mNonceBytes = {
-                    aNonceByteA, aNonceByteB, aNonceByteC, aNonceByteD,
-                    aNonceByteE, aNonceByteF, aNonceByteG, aNonceByteH,
+                    aNonceWordA, aNonceWordB, aNonceWordC, aNonceWordD,
+                    aNonceWordE, aNonceWordF, aNonceWordG, aNonceWordH,
                 };
             } else {
                 pSlices[aSliceIndex].mNonceBytes.clear();
@@ -153,11 +164,7 @@ bool CSPRNGV2::Bake(bool pIsNonKDF,
                 aOrbiterE, aOrbiterF, aOrbiterG, aOrbiterH,
                 aOrbiterI, aOrbiterJ, aOrbiterK,
             };
-            pSlices[aSliceIndex].mWanderers = {
-                aWandererA, aWandererB, aWandererC, aWandererD,
-                aWandererE, aWandererF, aWandererG, aWandererH,
-                aWandererI, aWandererJ, aWandererK
-            };
+            pSlices[aSliceIndex].mWanderers = MakeShuffledWanderers();
         }
         
     }
@@ -166,19 +173,6 @@ bool CSPRNGV2::Bake(bool pIsNonKDF,
     
     aPlan->mIsNonKDF = pIsNonKDF;
     aPlan->mDomain = pDomain;
-    
-    std::vector<int> aNonceSliceIndexes;
-    for (int aSliceIndex = 0; aSliceIndex < static_cast<int>(pSlices.size()); ++aSliceIndex) {
-        if (pSlices[static_cast<std::size_t>(aSliceIndex)].mARXSkeleton.HasNonceSlots()) {
-            aNonceSliceIndexes.push_back(aSliceIndex);
-        }
-    }
-
-    int aFullNonceIndex = -1;
-    if (!aNonceSliceIndexes.empty()) {
-        aFullNonceIndex = aNonceSliceIndexes[static_cast<std::size_t>(
-            Random::Get(static_cast<int>(aNonceSliceIndexes.size())))];
-    }
     
     int aSliceCount = (int)pSlices.size();
     
@@ -214,8 +208,7 @@ bool CSPRNGV2::Bake(bool pIsNonKDF,
                          aSlice.mOrbiters,
                          aSlice.mWanderers,
                          aSlice.mHotPack,
-                         ((aFullNonceIndex == aSliceIndex) &&
-                          aSlice.mARXSkeleton.HasNonceSlots()),
+                         false,
                          aSlice.mDest,
                          aSlice.mDestWriteInverted,
                          &aLoop,

@@ -1946,6 +1946,7 @@ bool ApplyBranchStringLine(const std::string &pRawLine,
     if ((aRuntimeRawLine.rfind("TwistInvest::", 0U) == 0U) ||
         (aRuntimeRawLine.rfind("TwistMemory::", 0U) == 0U) ||
         (aRuntimeRawLine.rfind("TwistSquash::", 0U) == 0U) ||
+        (aRuntimeRawLine.rfind("TwistDiffuse::", 0U) == 0U) ||
         (aRuntimeRawLine.rfind("TwistShiftBox::", 0U) == 0U) ||
         (aRuntimeRawLine.rfind("TwistIndexShuffle::", 0U) == 0U) ||
         (aRuntimeRawLine.rfind("mMatrix.", 0U) == 0U)) {

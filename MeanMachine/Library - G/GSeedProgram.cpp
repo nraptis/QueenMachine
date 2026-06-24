@@ -7,6 +7,7 @@
 
 #include "GJson.hpp"
 #include "TwistExpander.hpp"
+#include "TwistDiffuse.hpp"
 #include "TwistFunctional.hpp"
 #include "TwistIndexShuffle.hpp"
 #include "TwistInvest.hpp"
@@ -493,6 +494,38 @@ std::string TrimRuntimeLine(const std::string &pText) {
     return pText.substr(aStart, aEnd - aStart);
 }
 
+std::string StripRuntimeLineComments(const std::string &pText) {
+    std::ostringstream aStream;
+    std::size_t aCursor = 0U;
+    bool aNeedsNewline = false;
+
+    while (aCursor <= pText.size()) {
+        std::size_t aLineEnd = pText.find('\n', aCursor);
+        if (aLineEnd == std::string::npos) {
+            aLineEnd = pText.size();
+        }
+
+        std::string aLine = pText.substr(aCursor, aLineEnd - aCursor);
+        const std::size_t aComment = aLine.find("//");
+        if (aComment != std::string::npos) {
+            aLine = aLine.substr(0U, aComment);
+        }
+
+        if (aNeedsNewline) {
+            aStream << '\n';
+        }
+        aStream << aLine;
+        aNeedsNewline = true;
+
+        if (aLineEnd >= pText.size()) {
+            break;
+        }
+        aCursor = aLineEnd + 1U;
+    }
+
+    return aStream.str();
+}
+
 bool ParseRuntimeIntToken(std::string pToken,
                           const std::unordered_map<std::string, GRuntimeScalar> *pVariables,
                           int *pValueOut) {
@@ -737,11 +770,7 @@ bool ParseRuntimeM88DispatchLine(const std::string &pRawLine,
         return false;
     }
 
-    std::string aLine = pRawLine;
-    const std::size_t aComment = aLine.find("//");
-    if (aComment != std::string::npos) {
-        aLine = aLine.substr(0U, aComment);
-    }
+    std::string aLine = StripRuntimeLineComments(pRawLine);
     aLine = TrimRuntimeLine(aLine);
     if (!aLine.empty() && (aLine.back() == ';')) {
         aLine.pop_back();
@@ -800,11 +829,7 @@ void CollectRuntimeSquashSlots(const std::string &pRawLine,
         return;
     }
 
-    std::string aLine = pRawLine;
-    const std::size_t aComment = aLine.find("//");
-    if (aComment != std::string::npos) {
-        aLine = aLine.substr(0U, aComment);
-    }
+    std::string aLine = StripRuntimeLineComments(pRawLine);
     aLine = TrimRuntimeLine(aLine);
     if (!aLine.empty() && (aLine.back() == ';')) {
         aLine.pop_back();
@@ -830,6 +855,116 @@ void CollectRuntimeSquashSlots(const std::string &pRawLine,
     for (const std::string &aArg : aArgs) {
         TwistWorkSpaceSlot aSlot = TwistWorkSpaceSlot::kInvalid;
         if (ResolveRuntimeAliasSlot(aArg, &aSlot)) {
+            AppendUnique(pSlots, aSlot);
+        }
+    }
+}
+
+bool ParseRuntimeDiffuseLine(const std::string &pRawLine,
+                             std::string *pMethodOut,
+                             std::vector<std::string> *pArgsOut) {
+    if (pArgsOut == nullptr) {
+        return false;
+    }
+
+    std::string aLine = StripRuntimeLineComments(pRawLine);
+    aLine = TrimRuntimeLine(aLine);
+    if (!aLine.empty() && (aLine.back() == ';')) {
+        aLine.pop_back();
+        aLine = TrimRuntimeLine(aLine);
+    }
+
+    const std::string aPrefix = "TwistDiffuse::";
+    if (aLine.rfind(aPrefix, 0U) != 0U) {
+        return false;
+    }
+
+    const std::size_t aOpen = aLine.find('(', aPrefix.size());
+    const std::size_t aClose = aLine.rfind(')');
+    if ((aOpen == std::string::npos) || (aClose == std::string::npos) || (aClose < aOpen)) {
+        return false;
+    }
+
+    if (pMethodOut != nullptr) {
+        *pMethodOut = aLine.substr(aPrefix.size(), aOpen - aPrefix.size());
+    }
+    return SplitRuntimeCallArguments(aLine.substr(aOpen + 1U, aClose - aOpen - 1U), pArgsOut);
+}
+
+void CollectRuntimeDiffuseSlots(const std::string &pRawLine,
+                                std::vector<TwistWorkSpaceSlot> *pSlots) {
+    if (pSlots == nullptr) {
+        return;
+    }
+
+    std::string aMethod;
+    std::vector<std::string> aArgs;
+    if (!ParseRuntimeDiffuseLine(pRawLine, &aMethod, &aArgs) ||
+        ((aMethod != "Diffuse") && (aMethod != "DiffuseWithDomainWords")) ||
+        (aArgs.size() < 12U)) {
+        return;
+    }
+
+    for (std::size_t aArgumentIndex = 0U; aArgumentIndex < 12U; aArgumentIndex += 1U) {
+        TwistWorkSpaceSlot aSlot = TwistWorkSpaceSlot::kInvalid;
+        if (ResolveRuntimeAliasSlot(aArgs[aArgumentIndex], &aSlot)) {
+            AppendUnique(pSlots, aSlot);
+        }
+    }
+}
+
+void CollectRuntimeMemorySlots(const std::string &pRawLine,
+                               std::vector<TwistWorkSpaceSlot> *pSlots) {
+    if (pSlots == nullptr) {
+        return;
+    }
+    
+    std::string aLine = pRawLine;
+    const std::size_t aComment = aLine.find("//");
+    if (aComment != std::string::npos) {
+        aLine = aLine.substr(0U, aComment);
+    }
+    aLine = TrimRuntimeLine(aLine);
+    if (!aLine.empty() && (aLine.back() == ';')) {
+        aLine.pop_back();
+        aLine = TrimRuntimeLine(aLine);
+    }
+    
+    const std::string aPrefix = "TwistMemory::";
+    if (aLine.rfind(aPrefix, 0U) != 0U) {
+        return;
+    }
+    
+    const std::size_t aOpen = aLine.find('(', aPrefix.size());
+    const std::size_t aClose = aLine.rfind(')');
+    if ((aOpen == std::string::npos) || (aClose == std::string::npos) || (aClose < aOpen)) {
+        return;
+    }
+    
+    const std::string aMethod = aLine.substr(aPrefix.size(), aOpen - aPrefix.size());
+    std::vector<std::string> aArgs;
+    if (!SplitRuntimeCallArguments(aLine.substr(aOpen + 1U, aClose - aOpen - 1U), &aArgs)) {
+        return;
+    }
+    
+    std::size_t aBufferArgumentCount = 0U;
+    if ((aMethod == "ZeroBlock") ||
+        (aMethod == "ZeroKeyBoxA") ||
+        (aMethod == "ZeroKeyBoxB")) {
+        aBufferArgumentCount = 1U;
+    } else if (aMethod == "Copy") {
+        aBufferArgumentCount = 2U;
+    }
+    
+    for (std::size_t aArgumentIndex = 0U; (aArgumentIndex < aBufferArgumentCount) && (aArgumentIndex < aArgs.size()); aArgumentIndex += 1U) {
+        std::string aAlias = TrimRuntimeLine(aArgs[aArgumentIndex]);
+        const std::size_t aPlus = aAlias.find('+');
+        if (aPlus != std::string::npos) {
+            aAlias = TrimRuntimeLine(aAlias.substr(0U, aPlus));
+        }
+        
+        TwistWorkSpaceSlot aSlot = TwistWorkSpaceSlot::kInvalid;
+        if (ResolveRuntimeAliasSlot(aAlias, &aSlot)) {
             AppendUnique(pSlots, aSlot);
         }
     }
@@ -1297,6 +1432,167 @@ bool ExecuteRuntimeRawSquashLine(const std::string &pRawLine,
         return false;
     }
 
+    return true;
+}
+
+bool ExecuteRuntimeRawDiffuseLine(const std::string &pRawLine,
+                                  TwistWorkSpace *pWorkSpace,
+                                  TwistExpander *pExpander,
+                                  const std::unordered_map<std::string, GRuntimeScalar> *pVariables,
+                                  bool *pExecuted,
+                                  std::string *pError) {
+    if (pExecuted != nullptr) {
+        *pExecuted = false;
+    }
+    if ((pWorkSpace == nullptr) || (pExpander == nullptr) || (pVariables == nullptr)) {
+        return true;
+    }
+
+    std::string aMethod;
+    std::vector<std::string> aArgs;
+    if (!ParseRuntimeDiffuseLine(pRawLine, &aMethod, &aArgs)) {
+        return true;
+    }
+    if (pExecuted != nullptr) {
+        *pExecuted = true;
+    }
+
+    const bool aUseDomainWords = (aMethod == "DiffuseWithDomainWords");
+    if ((aMethod != "Diffuse") && !aUseDomainWords) {
+        SetError(pError, "Diffuse call method was unsupported: " + aMethod);
+        return false;
+    }
+
+    const std::size_t aExpectedCount = aUseDomainWords ? 21U : 13U;
+    if (aArgs.size() != aExpectedCount) {
+        SetError(pError, "Diffuse call expected " + std::to_string(aExpectedCount) + " arguments.");
+        return false;
+    }
+
+    auto ResolveBufferArg = [&](const std::size_t pArgumentIndex,
+                                const char *pLabel,
+                                std::uint8_t **pBufferOut) -> bool {
+        TwistWorkSpaceSlot aSlot = TwistWorkSpaceSlot::kInvalid;
+        if (!ResolveRuntimeAliasSlot(aArgs[pArgumentIndex], &aSlot)) {
+            SetError(pError, std::string("Diffuse ") + pLabel + " was invalid: " + aArgs[pArgumentIndex]);
+            return false;
+        }
+        *pBufferOut = ResolveRuntimeBufferSlot(pWorkSpace, pExpander, aSlot);
+        if (*pBufferOut == nullptr) {
+            SetError(pError, std::string("Diffuse ") + pLabel + " resolved to null: " + aArgs[pArgumentIndex]);
+            return false;
+        }
+        return true;
+    };
+
+    auto ResolveIndexListArg = [&](const std::size_t pArgumentIndex,
+                                   const char *pLabel,
+                                   std::size_t **pIndexListOut) -> bool {
+        TwistWorkSpaceSlot aSlot = TwistWorkSpaceSlot::kInvalid;
+        if (!ResolveRuntimeAliasSlot(aArgs[pArgumentIndex], &aSlot) || !IsIndexListSlot(aSlot)) {
+            SetError(pError, std::string("Diffuse ") + pLabel + " was invalid: " + aArgs[pArgumentIndex]);
+            return false;
+        }
+        std::uint8_t *aBuffer = ResolveRuntimeBufferSlot(pWorkSpace, pExpander, aSlot);
+        if (aBuffer == nullptr) {
+            SetError(pError, std::string("Diffuse ") + pLabel + " resolved to null: " + aArgs[pArgumentIndex]);
+            return false;
+        }
+        *pIndexListOut = reinterpret_cast<std::size_t *>(aBuffer);
+        return true;
+    };
+
+    std::uint8_t *aInputLaneA = nullptr;
+    std::uint8_t *aInputLaneB = nullptr;
+    std::uint8_t *aOutputLaneA = nullptr;
+    std::uint8_t *aOutputLaneB = nullptr;
+    std::uint8_t *aShuffleEntropyLaneA = nullptr;
+    std::uint8_t *aShuffleEntropyLaneB = nullptr;
+    std::uint8_t *aOperationSourceLaneA = nullptr;
+    std::uint8_t *aOperationSourceLaneB = nullptr;
+    std::size_t *aIndexList256A = nullptr;
+    std::size_t *aIndexList256B = nullptr;
+    std::size_t *aIndexList256C = nullptr;
+    std::size_t *aIndexList256D = nullptr;
+
+    if (!ResolveBufferArg(0U, "input lane A", &aInputLaneA) ||
+        !ResolveBufferArg(1U, "input lane B", &aInputLaneB) ||
+        !ResolveBufferArg(2U, "output lane A", &aOutputLaneA) ||
+        !ResolveBufferArg(3U, "output lane B", &aOutputLaneB) ||
+        !ResolveBufferArg(4U, "shuffle entropy lane A", &aShuffleEntropyLaneA) ||
+        !ResolveBufferArg(5U, "shuffle entropy lane B", &aShuffleEntropyLaneB) ||
+        !ResolveBufferArg(6U, "operation source lane A", &aOperationSourceLaneA) ||
+        !ResolveBufferArg(7U, "operation source lane B", &aOperationSourceLaneB) ||
+        !ResolveIndexListArg(8U, "index list 256 A", &aIndexList256A) ||
+        !ResolveIndexListArg(9U, "index list 256 B", &aIndexList256B) ||
+        !ResolveIndexListArg(10U, "index list 256 C", &aIndexList256C) ||
+        !ResolveIndexListArg(11U, "index list 256 D", &aIndexList256D)) {
+        return false;
+    }
+
+    if (TrimRuntimeLine(aArgs[12U]) != "&mMatrix") {
+        SetError(pError, "Diffuse matrix argument was invalid: " + aArgs[12U]);
+        return false;
+    }
+
+    if (!aUseDomainWords) {
+        TwistDiffuse::Diffuse(aInputLaneA,
+                              aInputLaneB,
+                              aOutputLaneA,
+                              aOutputLaneB,
+                              aShuffleEntropyLaneA,
+                              aShuffleEntropyLaneB,
+                              aOperationSourceLaneA,
+                              aOperationSourceLaneB,
+                              aIndexList256A,
+                              aIndexList256B,
+                              aIndexList256C,
+                              aIndexList256D,
+                              &(pExpander->mMatrix));
+        return true;
+    }
+
+    GRuntimeScalar aMatrixSelectA = 0ULL;
+    GRuntimeScalar aMatrixSelectB = 0ULL;
+    int aMatrixUnrollA = 0;
+    int aMatrixUnrollB = 0;
+    int aMatrixArgA = 0;
+    int aMatrixArgB = 0;
+    int aMatrixArgC = 0;
+    int aMatrixArgD = 0;
+    if (!ParseRuntimeScalarToken(aArgs[13U], pVariables, &aMatrixSelectA) ||
+        !ParseRuntimeScalarToken(aArgs[14U], pVariables, &aMatrixSelectB) ||
+        !ParseRuntimeIntToken(aArgs[15U], pVariables, &aMatrixUnrollA) ||
+        !ParseRuntimeIntToken(aArgs[16U], pVariables, &aMatrixUnrollB) ||
+        !ParseRuntimeIntToken(aArgs[17U], pVariables, &aMatrixArgA) ||
+        !ParseRuntimeIntToken(aArgs[18U], pVariables, &aMatrixArgB) ||
+        !ParseRuntimeIntToken(aArgs[19U], pVariables, &aMatrixArgC) ||
+        !ParseRuntimeIntToken(aArgs[20U], pVariables, &aMatrixArgD)) {
+        SetError(pError, "Diffuse domain word argument was invalid.");
+        return false;
+    }
+
+    TwistDiffuse::DiffuseWithDomainWords(aInputLaneA,
+                                         aInputLaneB,
+                                         aOutputLaneA,
+                                         aOutputLaneB,
+                                         aShuffleEntropyLaneA,
+                                         aShuffleEntropyLaneB,
+                                         aOperationSourceLaneA,
+                                         aOperationSourceLaneB,
+                                         aIndexList256A,
+                                         aIndexList256B,
+                                         aIndexList256C,
+                                         aIndexList256D,
+                                         &(pExpander->mMatrix),
+                                         static_cast<std::uint64_t>(aMatrixSelectA),
+                                         static_cast<std::uint64_t>(aMatrixSelectB),
+                                         static_cast<std::uint8_t>(aMatrixUnrollA),
+                                         static_cast<std::uint8_t>(aMatrixUnrollB),
+                                         static_cast<std::uint8_t>(aMatrixArgA),
+                                         static_cast<std::uint8_t>(aMatrixArgB),
+                                         static_cast<std::uint8_t>(aMatrixArgC),
+                                         static_cast<std::uint8_t>(aMatrixArgD));
     return true;
 }
 
@@ -3382,6 +3678,18 @@ bool ExecuteStatement(const GStatement &pStatement,
             return true;
         }
 
+        if (!ExecuteRuntimeRawDiffuseLine(pStatement.mRawLine,
+                                          pWorkSpace,
+                                          pExpander,
+                                          pVariables,
+                                          &aExecutedRawLine,
+                                          pError)) {
+            return false;
+        }
+        if (aExecutedRawLine) {
+            return true;
+        }
+
         if (!ExecuteRuntimeRawShiftBoxLine(pStatement.mRawLine,
                                            pWorkSpace,
                                            &aExecutedRawLine,
@@ -4092,6 +4400,8 @@ static void CollectSlotsFromStatement(const GStatement &pStatement,
     if (pStatement.IsRawLine()) {
         CollectRuntimeM88DispatchSlots(pStatement.mRawLine, pSlots);
         CollectRuntimeSquashSlots(pStatement.mRawLine, pSlots);
+        CollectRuntimeMemorySlots(pStatement.mRawLine, pSlots);
+        CollectRuntimeDiffuseSlots(pStatement.mRawLine, pSlots);
         return;
     }
     if (pStatement.mTarget.IsBuf()) {
