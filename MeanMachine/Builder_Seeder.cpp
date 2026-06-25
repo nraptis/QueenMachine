@@ -9,12 +9,12 @@
 #include "GKDF.hpp"
 #include "GSnow.hpp"
 #include "GTwistExpander.hpp"
-#include "GMemory.hpp"
 #include "GFarm.hpp"
 
 #include "Random.hpp"
 
 #include "GSeedRunSeed.hpp"
+#include "GSquashInvestToKeyBoxes.hpp"
 
 #include "GRunMatrixDiffusion.hpp"
 
@@ -190,18 +190,6 @@ bool Builder_Seeder::Build(GTwistExpander *pExpander,
     aSnowLanes.push_back(GSymbol::Buf(TwistWorkSpaceSlot::kSnowC));
     aSnowLanes.push_back(GSymbol::Buf(TwistWorkSpaceSlot::kSnowD));
     
-    GBatch aMemoryZeroBatch;
-    GMemory aMemory;
-    if (!aMemory.BakeZeroKeyBoxA(GSymbol::Buf(TwistWorkSpaceSlot::kKeyBoxUnrolledA), &aStatements, pErrorMessage)) {
-        return false;
-    }
-    if (!aMemory.BakeZeroKeyBoxB(GSymbol::Buf(TwistWorkSpaceSlot::kKeyBoxUnrolledB), &aStatements, pErrorMessage)) {
-        return false;
-    }
-    aMemoryZeroBatch.CommitStatements(&aStatements);
-    aStatements.clear();
-    pExpander->mSeed.AddBatch(aMemoryZeroBatch);
-    
     std::vector<GSnowType> aSnowTypes;
     aSnowTypes.push_back(GSnowType::kAES);
     aSnowTypes.push_back(GSnowType::kChaCha);
@@ -322,19 +310,11 @@ bool Builder_Seeder::Build(GTwistExpander *pExpander,
         }
     }
 
-    std::vector<GStatement> aZeroSnowStatements;
-    for (const GSymbol &aSnowLane : aSnowLanes) {
-        if (!aMemory.BakeZero(aSnowLane, &aZeroSnowStatements, pErrorMessage)) {
-            return false;
-        }
+    GSquashInvestToKeyBoxes aSquashInvest;
+    if (!aSquashInvest.Build(pExpander->mSeed, pErrorMessage)) {
+        return false;
     }
-    pExpander->mSeed.AddLine("// secure zero snow");
-    for (const GStatement &aStatement : aZeroSnowStatements) {
-        pExpander->mSeed.AddLine(aStatement.mRawLine);
-    }
-    pExpander->mSeed.AddLine("//");
-    
-    
+
     return Build_PostKDF(pExpander, pErrorMessage);
     
 }
@@ -371,28 +351,6 @@ bool Builder_Seeder::Build_PostKDF(GTwistExpander *pExpander,
     if (!BuildSeedStage(pExpander->mSeed, aRunnerSeedB, "GSeedRunSeed_B", pErrorMessage)) {
         return false;
     }
-    
-    std::vector<GStatement> aZeroStatements;
-    GMemory aMemory;
-    if (!aMemory.BakeZero(aExpansionLanes[0], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    if (!aMemory.BakeZero(aExpansionLanes[1], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    if (!aMemory.BakeZero(aExpansionLanes[2], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    if (!aMemory.BakeZero(aExpansionLanes[3], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    
-    pExpander->mSeed.AddLine("// secure zero");
-    for (const GStatement &aStatement : aZeroStatements) {
-        pExpander->mSeed.AddLine(aStatement.mRawLine);
-    }
-    pExpander->mSeed.AddLine("//");
-    
     
     AddSeedDomainWordLines(pExpander->mSeed, TwistDomain::kPhaseC, false);
     GSeedRunSeed_C aRunnerSeedC(true, false);
@@ -439,41 +397,6 @@ bool Builder_Seeder::Build_PostKDF(GTwistExpander *pExpander,
         pExpander->mSeed.AddBatch(aBatchDiffusion);
     }
     
-    aZeroStatements.clear();
-    if (!aMemory.BakeZero(aOperationLanes[0], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    if (!aMemory.BakeZero(aOperationLanes[1], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    if (!aMemory.BakeZero(aOperationLanes[2], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    if (!aMemory.BakeZero(aOperationLanes[3], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    if (!aMemory.BakeZero(aWorkLanes[0], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    if (!aMemory.BakeZero(aWorkLanes[1], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    if (!aMemory.BakeZero(aWorkLanes[2], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    if (!aMemory.BakeZero(aWorkLanes[3], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    
-    pExpander->mSeed.AddLine("// secure zero");
-    for (const GStatement &aStatement : aZeroStatements) {
-        pExpander->mSeed.AddLine(aStatement.mRawLine);
-    }
-    pExpander->mSeed.AddLine("//");
-    
-    
-    
-    
     AddSeedDomainWordLines(pExpander->mSeed, TwistDomain::kPhaseD, false);
     GSeedRunSeed_D aRunnerSeedD(true, false);
     if (!BuildSeedStage(pExpander->mSeed, aRunnerSeedD, "GSeedRunSeed_D", pErrorMessage)) {
@@ -482,26 +405,6 @@ bool Builder_Seeder::Build_PostKDF(GTwistExpander *pExpander,
     
     pExpander->mSeed.AddLine("//");
     
-    
-    
-    aZeroStatements.clear();
-    if (!aMemory.BakeZero(aExpansionLanes[0], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    if (!aMemory.BakeZero(aExpansionLanes[1], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    if (!aMemory.BakeZero(aExpansionLanes[2], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    if (!aMemory.BakeZero(aExpansionLanes[3], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    pExpander->mSeed.AddLine("// secure zero");
-    for (const GStatement &aStatement : aZeroStatements) {
-        pExpander->mSeed.AddLine(aStatement.mRawLine);
-    }
-    pExpander->mSeed.AddLine("//");
     
     
     std::vector<GStatement> aStatementsSquash;

@@ -201,22 +201,22 @@ TwistWorkSpace::TwistWorkSpace() {
 }
 
 void TwistWorkSpace::ShiftKeyBoxA(std::uint8_t *pBox) {
-    std::uint8_t *aDest = pBox + (H_KEY_A - 1) * W_KEY_A;
-    std::uint8_t *aSource = aDest - W_KEY_A;
-    for (int i = 0; i < (H_KEY_A - 1); i++) {
-        std::memcpy(aDest, aSource, W_KEY_A);
+    std::uint8_t *aDest = pBox + (H_KEY - 1) * W_KEY;
+    std::uint8_t *aSource = aDest - W_KEY;
+    for (int i = 0; i < (H_KEY - 1); i++) {
+        std::memcpy(aDest, aSource, W_KEY);
         aDest = aSource;
-        aSource = aDest - W_KEY_A;
+        aSource = aDest - W_KEY;
     }
 }
 
 void TwistWorkSpace::ShiftKeyBoxB(std::uint8_t *pBox) {
     std::uint8_t *aDest = pBox;
-    std::uint8_t *aSource = pBox + W_KEY_B;
-    for (int i = 0; i < (H_KEY_B - 1); i++) {
-        std::memcpy(aDest, aSource, W_KEY_B);
+    std::uint8_t *aSource = pBox + W_KEY;
+    for (int i = 0; i < (H_KEY - 1); i++) {
+        std::memcpy(aDest, aSource, W_KEY);
         aDest = aSource;
-        aSource = aDest + W_KEY_B;
+        aSource = aDest + W_KEY;
     }
 }
 
@@ -283,8 +283,8 @@ std::uint8_t *TwistWorkSpace::GetBuffer(TwistWorkSpace *pWorkSpace,
         case TwistWorkSpaceSlot::kIndexList256D: return reinterpret_cast<std::uint8_t *>(pExpander->mIndexList256D);
         case TwistWorkSpaceSlot::kKeyBoxUnrolledA: return &(pWorkSpace->mKeyBoxA[0][0]);
         case TwistWorkSpaceSlot::kKeyBoxUnrolledB: return &(pWorkSpace->mKeyBoxB[0][0]);
-        case TwistWorkSpaceSlot::kKeyRowReadA: return &(pWorkSpace->mKeyBoxA[H_KEY_A - 1][0]);
-        case TwistWorkSpaceSlot::kKeyRowReadB: return &(pWorkSpace->mKeyBoxB[H_KEY_B - 1][0]);
+        case TwistWorkSpaceSlot::kKeyRowReadA: return &(pWorkSpace->mKeyBoxA[H_KEY - 1][0]);
+        case TwistWorkSpaceSlot::kKeyRowReadB: return &(pWorkSpace->mKeyBoxB[H_KEY - 1][0]);
         case TwistWorkSpaceSlot::kKeyRowWriteA: return &(pWorkSpace->mKeyBoxA[0][0]);
         case TwistWorkSpaceSlot::kKeyRowWriteB: return &(pWorkSpace->mKeyBoxB[0][0]);
             
@@ -354,12 +354,12 @@ int TwistWorkSpace::GetBufferLength(TwistWorkSpaceSlot pSlot) {
     }
 
     switch (pSlot) {
-        case TwistWorkSpaceSlot::kKeyBoxUnrolledA: return S_KEY_A;
-        case TwistWorkSpaceSlot::kKeyBoxUnrolledB: return S_KEY_B;
+        case TwistWorkSpaceSlot::kKeyBoxUnrolledA: return S_KEY;
+        case TwistWorkSpaceSlot::kKeyBoxUnrolledB: return S_KEY;
         case TwistWorkSpaceSlot::kKeyRowReadA:
-        case TwistWorkSpaceSlot::kKeyRowWriteA: return W_KEY_A;
+        case TwistWorkSpaceSlot::kKeyRowWriteA: return W_KEY;
         case TwistWorkSpaceSlot::kKeyRowReadB:
-        case TwistWorkSpaceSlot::kKeyRowWriteB: return W_KEY_B;
+        case TwistWorkSpaceSlot::kKeyRowWriteB: return W_KEY;
 
         case TwistWorkSpaceSlot::kIndexList256A:
         case TwistWorkSpaceSlot::kIndexList256B:
@@ -395,4 +395,43 @@ bool TwistWorkSpace::IsSalt(TwistWorkSpaceSlot pSlot) {
 
 bool TwistWorkSpace::IsSalt(TwistBufferKey pKey) {
     return pKey.mKind == TwistBufferKind::kSalt;
+}
+
+void TwistWorkSpace::Zero() {
+    Zero_PostSeed();
+    mDomainBundle.Zero();
+}
+
+void TwistWorkSpace::Zero_PostSeed() {
+ 
+    memset(mExpansionLaneA, 0, sizeof(mExpansionLaneA));
+    memset(mExpansionLaneB, 0, sizeof(mExpansionLaneB));
+    memset(mExpansionLaneC, 0, sizeof(mExpansionLaneC));
+    memset(mExpansionLaneD, 0, sizeof(mExpansionLaneD));
+    
+    memset(mWorkLaneA, 0, sizeof(mWorkLaneA));
+    memset(mWorkLaneB, 0, sizeof(mWorkLaneB));
+    memset(mWorkLaneC, 0, sizeof(mWorkLaneC));
+    memset(mWorkLaneD, 0, sizeof(mWorkLaneD));
+    
+    memset(mOperationLaneA, 0, sizeof(mOperationLaneA));
+    memset(mOperationLaneB, 0, sizeof(mOperationLaneB));
+    memset(mOperationLaneC, 0, sizeof(mOperationLaneC));
+    memset(mOperationLaneD, 0, sizeof(mOperationLaneD));
+    
+    memset(mSnowLaneA, 0, sizeof(mSnowLaneA));
+    memset(mSnowLaneB, 0, sizeof(mSnowLaneB));
+    memset(mSnowLaneC, 0, sizeof(mSnowLaneC));
+    memset(mSnowLaneD, 0, sizeof(mSnowLaneD));
+    
+    memset(mInvestLaneA, 0, sizeof(mInvestLaneA));
+    memset(mInvestLaneB, 0, sizeof(mInvestLaneB));
+    memset(mInvestLaneC, 0, sizeof(mInvestLaneC));
+    memset(mInvestLaneD, 0, sizeof(mInvestLaneD));
+    
+    memset(mInvestLaneE, 0, sizeof(mInvestLaneE));
+    memset(mInvestLaneF, 0, sizeof(mInvestLaneF));
+    memset(mInvestLaneG, 0, sizeof(mInvestLaneG));
+    memset(mInvestLaneH, 0, sizeof(mInvestLaneH));
+    
 }

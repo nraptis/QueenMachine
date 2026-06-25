@@ -645,8 +645,7 @@ bool ParseRuntimeSizeToken(const std::string &pToken,
 
     const std::string aToken = TrimRuntimeLine(pToken);
     if (aToken == "S_BLOCK") { *pValueOut = S_BLOCK; return true; }
-    if (aToken == "W_KEY_A") { *pValueOut = W_KEY_A; return true; }
-    if (aToken == "W_KEY_B") { *pValueOut = W_KEY_B; return true; }
+    if (aToken == "W_KEY") { *pValueOut = W_KEY; return true; }
 
     int aValue = 0;
     if (!ParseRuntimeIntToken(aToken, pVariables, &aValue) || (aValue < 0)) {
@@ -2485,8 +2484,8 @@ unsigned int ReadWrapTrimMaskForType(const GReadWrapType pType) {
     switch (pType) {
         case GReadWrapType::kSBox: return static_cast<unsigned int>(S_SBOX1);
         case GReadWrapType::kSalt: return static_cast<unsigned int>(S_SALT1);
-        case GReadWrapType::kKeyA: return static_cast<unsigned int>(S_KEY_A - 1);
-        case GReadWrapType::kKeyB: return static_cast<unsigned int>(S_KEY_B - 1);
+        case GReadWrapType::kKeyA: return static_cast<unsigned int>(S_KEY - 1);
+        case GReadWrapType::kKeyB: return static_cast<unsigned int>(S_KEY - 1);
         default: return 0U;
     }
 }
@@ -2496,8 +2495,8 @@ int ReadWrapLimitForType(const GReadWrapType pType) {
         case GReadWrapType::kBlock: return S_BLOCK;
         case GReadWrapType::kSBox: return S_SBOX;
         case GReadWrapType::kSalt: return S_SALT;
-        case GReadWrapType::kKeyA: return S_KEY_A;
-        case GReadWrapType::kKeyB: return S_KEY_B;
+        case GReadWrapType::kKeyA: return S_KEY;
+        case GReadWrapType::kKeyB: return S_KEY;
         default: return 0;
     }
 }
@@ -2506,10 +2505,8 @@ int ResolveLengthText(const std::string &pText) {
     if (pText == "S_BLOCK") { return S_BLOCK; }
     if (pText == "S_SBOX") { return S_SBOX; }
     if (pText == "S_SALT") { return S_SALT; }
-    if (pText == "W_KEY_A") { return W_KEY_A; }
-    if (pText == "W_KEY_B") { return W_KEY_B; }
-    if (pText == "S_KEY_A") { return S_KEY_A; }
-    if (pText == "S_KEY_B") { return S_KEY_B; }
+    if (pText == "W_KEY") { return W_KEY; }
+    if (pText == "S_KEY") { return S_KEY; }
 
     if (pText.empty()) {
         return 0;
@@ -3104,12 +3101,12 @@ std::string CppIndexForSlot(const TwistWorkSpaceSlot pSlot,
 
     std::string aMaskToken;
     switch (pSlot) {
-        case TwistWorkSpaceSlot::kKeyBoxUnrolledA: aMaskToken = "(S_KEY_A - 1)"; break;
-        case TwistWorkSpaceSlot::kKeyBoxUnrolledB: aMaskToken = "(S_KEY_B - 1)"; break;
+        case TwistWorkSpaceSlot::kKeyBoxUnrolledA: aMaskToken = "(S_KEY - 1)"; break;
+        case TwistWorkSpaceSlot::kKeyBoxUnrolledB: aMaskToken = "(S_KEY - 1)"; break;
         case TwistWorkSpaceSlot::kKeyRowReadA:
-        case TwistWorkSpaceSlot::kKeyRowWriteA: aMaskToken = "W_KEY_A1"; break;
+        case TwistWorkSpaceSlot::kKeyRowWriteA: aMaskToken = "W_KEY1"; break;
         case TwistWorkSpaceSlot::kKeyRowReadB:
-        case TwistWorkSpaceSlot::kKeyRowWriteB: aMaskToken = "(W_KEY_B - 1)"; break;
+        case TwistWorkSpaceSlot::kKeyRowWriteB: aMaskToken = "W_KEY1"; break;
         default:
             if (IsSaltSlot(pSlot)) {
                 aMaskToken = "S_SALT1";
@@ -3298,8 +3295,8 @@ std::string CppReadWrapLimitToken(const GReadWrapType pType) {
         case GReadWrapType::kBlock: return "S_BLOCK";
         case GReadWrapType::kSBox: return "S_SBOX";
         case GReadWrapType::kSalt: return "S_SALT";
-        case GReadWrapType::kKeyA: return "S_KEY_A";
-        case GReadWrapType::kKeyB: return "S_KEY_B";
+        case GReadWrapType::kKeyA: return "S_KEY";
+        case GReadWrapType::kKeyB: return "S_KEY";
         default: return "S_BLOCK";
     }
 }
@@ -3308,8 +3305,8 @@ std::string CppReadWrapTrimMaskToken(const GReadWrapType pType) {
     switch (pType) {
         case GReadWrapType::kSBox: return "S_SBOX1";
         case GReadWrapType::kSalt: return "S_SALT1";
-        case GReadWrapType::kKeyA: return "(S_KEY_A - 1)";
-        case GReadWrapType::kKeyB: return "(S_KEY_B - 1)";
+        case GReadWrapType::kKeyA: return "(S_KEY - 1)";
+        case GReadWrapType::kKeyB: return "(S_KEY - 1)";
         default: return "";
     }
 }

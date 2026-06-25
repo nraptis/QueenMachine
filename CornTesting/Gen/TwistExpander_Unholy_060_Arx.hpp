@@ -254,4 +254,20 @@ public:
                      std::uint64_t *pWandererI,
                      std::uint64_t *pWandererJ,
                      std::uint64_t *pWandererK) override;
+    void Twist_D(TwistWorkSpace *pWorkSpace,
+                     std::uint8_t *pSource,
+                     std::uint64_t *pPrevious,
+                     std::uint64_t *pIngress,
+                     std::uint64_t *pCarry,
+                     std::uint64_t *pWandererA,
+                     std::uint64_t *pWandererB,
+                     std::uint64_t *pWandererC,
+                     std::uint64_t *pWandererD,
+                     std::uint64_t *pWandererE,
+                     std::uint64_t *pWandererF,
+                     std::uint64_t *pWandererG,
+                     std::uint64_t *pWandererH,
+                     std::uint64_t *pWandererI,
+                     std::uint64_t *pWandererJ,
+                     std::uint64_t *pWandererK) override;
 };

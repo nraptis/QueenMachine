@@ -155,8 +155,8 @@ GSeedRunStageConfig MakeKDF_A_BConfig() {
                                              "kdf_a_loop_b",
                                              GAXSFormat::kN9,
                                              {4, 4, 4, 4});
-    aConfig.mIgnoreNonces = true;
-    aConfig.mHasDomainMix = false;
+    //aConfig.mIgnoreNonces = true;
+    //aConfig.mHasDomainMix = false;
     
     aConfig.mSlices = {
         {{Slot::kExpansionLaneD, Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA},
@@ -184,8 +184,8 @@ GSeedRunStageConfig MakeKDF_A_CConfig() {
                                              "kdf_a_loop_c",
                                              GAXSFormat::kN5,
                                              {4, 4, 4, 4});
-    aConfig.mIgnoreNonces = true;
-    aConfig.mHasDomainMix = false;
+    //aConfig.mIgnoreNonces = true;
+    //aConfig.mHasDomainMix = false;
     
     aConfig.mSlices = {
         {{Slot::kOperationLaneD, Slot::kOperationLaneC, Slot::kOperationLaneB, Slot::kOperationLaneA},
@@ -213,8 +213,8 @@ GSeedRunStageConfig MakeKDF_A_DConfig() {
                                              "kdf_a_loop_d",
                                              GAXSFormat::kN7,
                                              {4, 4, 4, 4});
-    aConfig.mIgnoreNonces = true;
-    aConfig.mHasDomainMix = false;
+    //aConfig.mIgnoreNonces = true;
+    //aConfig.mHasDomainMix = false;
     
     aConfig.mSlices = {
         {{Slot::kExpansionLaneD, Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA},

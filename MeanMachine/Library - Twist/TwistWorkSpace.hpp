@@ -20,15 +20,10 @@
 #define S_SBOX1 255
 #define S_SALT1 31
 
-#define W_KEY_A 2048
-#define W_KEY_A1 2047
-#define H_KEY_A 7
-#define S_KEY_A (W_KEY_A * H_KEY_A)
-
-#define W_KEY_B 2048
-#define W_KEY_1 2047
-#define H_KEY_B 9
-#define S_KEY_B (W_KEY_B * H_KEY_B)
+#define W_KEY 1024
+#define W_KEY1 1023
+#define H_KEY 8
+#define S_KEY (W_KEY * H_KEY)
 
 class TwistExpander;
 
@@ -149,12 +144,12 @@ enum class TwistWorkSpaceSlot : std::uint16_t {
     // 3.) Before writing, we Shift, evicting last row and duplicating first row
     // 4.) We "write", after a twist, from "kKeyRowWriteA" or "kKeyRowWriteB", which is the 'first row'.
     
-    kKeyBoxUnrolledA=120, // size is S_KEY_A
-    kKeyBoxUnrolledB=121, // size is S_KEY_B
-    kKeyRowReadA=122, // size is W_KEY_A
-    kKeyRowReadB=123, // size is W_KEY_B
-    kKeyRowWriteA=124, // size is S_KEY_A
-    kKeyRowWriteB=125, // size is S_KEY_B
+    kKeyBoxUnrolledA=120, // size is S_KEY
+    kKeyBoxUnrolledB=121, // size is S_KEY
+    kKeyRowReadA=122, // size is W_KEY
+    kKeyRowReadB=123, // size is W_KEY
+    kKeyRowWriteA=124, // size is W_KEY
+    kKeyRowWriteB=125, // size is W_KEY
 
     kParamDomainSaltOrbiterAssignA=170,
     kParamDomainSaltOrbiterAssignB=171,
@@ -361,6 +356,15 @@ public:
     std::uint8_t                            mMaskMutateA;
     std::uint8_t                            mMaskMutateB;
     
+    void                                    Zero() {
+        mIngress = 0; mScatter = 0; mCross = 0;
+        mDomainConstantPublicIngress = 0; mDomainConstantPrivateIngress = 0; mDomainConstantCrossIngress = 0;
+        mMatrixSelectA = 0; mMatrixSelectB = 0;
+        mMatrixUnrollA = 0; mMatrixUnrollB = 0;
+        mMatrixArgA = 0; mMatrixArgB = 0; mMatrixArgC = 0; mMatrixArgD = 0;
+        mMaskMutateA = 0; mMaskMutateB = 0;
+    }
+    
 };
 
 struct TwistDomainSeedRoundMaterial {
@@ -372,6 +376,15 @@ public:
     std::uint64_t                           mSaltE[S_SALT];
     std::uint64_t                           mSaltF[S_SALT];
     
+    void                                    Zero() {
+        memset(mSaltA, 0, sizeof(mSaltA));
+        memset(mSaltB, 0, sizeof(mSaltB));
+        memset(mSaltC, 0, sizeof(mSaltC));
+        memset(mSaltD, 0, sizeof(mSaltD));
+        memset(mSaltE, 0, sizeof(mSaltE));
+        memset(mSaltF, 0, sizeof(mSaltF));
+    }
+    
 };
 
 class TwistDomainSaltSet {
@@ -379,6 +392,12 @@ public:
     TwistDomainSeedRoundMaterial            mOrbiterAssign;
     TwistDomainSeedRoundMaterial            mOrbiterUpdate;
     TwistDomainSeedRoundMaterial            mWandererUpdate;
+    
+    void                                    Zero() {
+        mOrbiterAssign.Zero();
+        mOrbiterUpdate.Zero();
+        mWandererUpdate.Zero();
+    }
     
 };
 
@@ -407,6 +426,34 @@ public:
 
     TwistDomainSaltSet                      mPhaseHSalts;
     TwistDomainConstants                    mPhaseHConstants;
+    
+    void                                    Zero() {
+        mPhaseASalts.Zero();
+        mPhaseAConstants.Zero();
+        
+        mPhaseBSalts.Zero();
+        mPhaseBConstants.Zero();
+
+        mPhaseCSalts.Zero();
+        mPhaseCConstants.Zero();
+
+        mPhaseDSalts.Zero();
+        mPhaseDConstants.Zero();
+
+        mPhaseESalts.Zero();
+        mPhaseEConstants.Zero();
+
+        mPhaseFSalts.Zero();
+        mPhaseFConstants.Zero();
+
+        mPhaseGSalts.Zero();
+        mPhaseGConstants.Zero();
+
+        mPhaseHSalts.Zero();
+        mPhaseHConstants.Zero();
+        
+    }
+    
 };
 
 
@@ -415,8 +462,8 @@ class TwistWorkSpace {
 public:
     TwistWorkSpace();
 
-    uint8_t                                 mKeyBoxA[H_KEY_A][W_KEY_A];
-    uint8_t                                 mKeyBoxB[H_KEY_B][W_KEY_B];
+    uint8_t                                 mKeyBoxA[H_KEY][W_KEY];
+    uint8_t                                 mKeyBoxB[H_KEY][W_KEY];
 
     std::uint8_t                            mExpansionLaneA[S_BLOCK];
     std::uint8_t                            mExpansionLaneB[S_BLOCK];
@@ -448,7 +495,7 @@ public:
     std::uint8_t                            mInvestLaneG[S_BLOCK];
     std::uint8_t                            mInvestLaneH[S_BLOCK];
     
-
+    
     TwistDomainBundle                       mDomainBundle;
     
     // Rotate stays byte-wide across the workspace helpers.
@@ -471,6 +518,9 @@ public:
     
     static bool                             IsSalt(TwistWorkSpaceSlot pSlot);
     static bool                             IsSalt(TwistBufferKey pKey);
+    
+    void                                    Zero_PostSeed();
+    void                                    Zero();
     
 };
 

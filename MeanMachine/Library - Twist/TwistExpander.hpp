@@ -63,6 +63,8 @@ public:
                                                        
                                                        std::uint8_t *pDestination);
     
+    virtual void                            SquashInvestToKeyBoxes();
+    
     virtual void                            GrowKeyA(TwistWorkSpace *pWorkSpace);
     virtual void                            GrowKeyB(TwistWorkSpace *pWorkSpace);
     
@@ -73,6 +75,7 @@ public:
                                                   std::uint8_t *pSource,
                                                   std::uint8_t *pDestination,
                                                   unsigned int pDestinationByteLength);
+    
     
     std::size_t                             mIndexList256A[256];
     std::size_t                             mIndexList256B[256];
@@ -95,6 +98,9 @@ public:
     TwistDomainBundle                       mDomainBundleEphemeral;
     
     TwistWorkSpace                          *mWorkspace;
+    
+    void                                    Zero_PostSeed();
+    void                                    Zero();
     
 protected:
     
@@ -359,6 +365,23 @@ public:
                                                     std::uint64_t *pWandererK) = 0;
 
     virtual void                            Twist_C(TwistWorkSpace *pWorkSpace,
+                                                    std::uint8_t *pSource,
+                                                    std::uint64_t *pPrevious,
+                                                    std::uint64_t *pIngress,
+                                                    std::uint64_t *pCarry,
+                                                    std::uint64_t *pWandererA,
+                                                    std::uint64_t *pWandererB,
+                                                    std::uint64_t *pWandererC,
+                                                    std::uint64_t *pWandererD,
+                                                    std::uint64_t *pWandererE,
+                                                    std::uint64_t *pWandererF,
+                                                    std::uint64_t *pWandererG,
+                                                    std::uint64_t *pWandererH,
+                                                    std::uint64_t *pWandererI,
+                                                    std::uint64_t *pWandererJ,
+                                                    std::uint64_t *pWandererK) = 0;
+
+    virtual void                            Twist_D(TwistWorkSpace *pWorkSpace,
                                                     std::uint8_t *pSource,
                                                     std::uint64_t *pPrevious,
                                                     std::uint64_t *pIngress,

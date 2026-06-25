@@ -27,6 +27,7 @@ public:
                     std::size_t pBlockIndex,
                     std::size_t pBlockCount,
                     std::uint8_t *pDestination) override;
+    void SquashInvestToKeyBoxes() override;
     void GrowKeyA(TwistWorkSpace *pWorkSpace) override;
     void GrowKeyB(TwistWorkSpace *pWorkSpace) override;
 

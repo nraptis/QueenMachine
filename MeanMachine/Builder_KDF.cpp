@@ -19,8 +19,6 @@
 #include "GSeedRunKDF_B.hpp"
 
 #include "GRunMatrixDiffusion.hpp"
-#include "GMemory.hpp"
-
 namespace {
 
 template <typename Runner>
@@ -111,27 +109,6 @@ bool Builder_KDF::Build(GTwistExpander *pExpander,
     aOperationLanes.push_back(BufSymbol(TwistWorkSpaceSlot::kOperationLaneC));
     aOperationLanes.push_back(BufSymbol(TwistWorkSpaceSlot::kOperationLaneD));
     
-    
-    std::vector<GStatement> aZeroStatements;
-    GMemory aMemory;
-    if (!aMemory.BakeZero(aExpansionLanes[0], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    if (!aMemory.BakeZero(aExpansionLanes[1], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    if (!aMemory.BakeZero(aExpansionLanes[2], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    if (!aMemory.BakeZero(aExpansionLanes[3], &aZeroStatements, pErrorMessage)) {
-        return false;
-    }
-    
-    pExpander->mSeed.AddLine("// secure zero");
-    for (const GStatement &aStatement : aZeroStatements) {
-        pExpander->mSeed.AddLine(aStatement.mRawLine);
-    }
-    pExpander->mSeed.AddLine("//");
     
     for (int i=0;i<4;i+=2) {
         

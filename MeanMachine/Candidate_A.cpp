@@ -3029,12 +3029,12 @@ void Candidate_A::Seed(TwistWorkSpace *pWorkSpace,
             //
             aIngress = 0U;
             aIngress = aIngress ^ (RotL64(aNonceByteE, 19U) ^ RotL64(aNonceByteC, 38U));
-            aIngress = aIngress ^ (RotL64(mSource[((aIndex + 2956U)) & S_BLOCK1], 27U) ^ RotL64(aKeyBoxUnrolledA[((aIndex + 1585U)) & (S_KEY_A - 1)], 47U));
+            aIngress = aIngress ^ (RotL64(mSource[((aIndex + 2956U)) & S_BLOCK1], 27U) ^ RotL64(aKeyBoxUnrolledA[((aIndex + 1585U)) & (S_KEY - 1)], 47U));
             aIngress = TwistMix64::DiffuseA((aIngress ^ aPhaseADomainWordIngress));
             //
             aCross = 0U;
             aCross = aCross ^ (RotL64(aNonceByteA, 43U) ^ RotL64(aNonceByteB, 18U));
-            aCross = aCross ^ (RotL64(aKeyBoxUnrolledB[(((4095U - aIndex) + 1093U)) & (S_KEY_B - 1)], 35U) ^ RotL64(mSource[((S_BLOCK1 - aIndex + 2699U)) & S_BLOCK1], 27U));
+            aCross = aCross ^ (RotL64(aKeyBoxUnrolledB[(((4095U - aIndex) + 1093U)) & (S_KEY - 1)], 35U) ^ RotL64(mSource[((S_BLOCK1 - aIndex + 2699U)) & S_BLOCK1], 27U));
             aCross = TwistMix64::DiffuseB((aCross ^ aPhaseADomainWordCross));
             //
             aScatter = (RotL64(aIngress, 5U) ^ RotL64(aCross, 38U)) + (RotL64(aPrevious, 23U) + RotL64(aCarry, 53U));
@@ -3114,7 +3114,7 @@ void Candidate_A::Seed(TwistWorkSpace *pWorkSpace,
             //
             aCross = 0U;
             aCross = aCross ^ ((RotL64(aNonceByteE, 29U) ^ RotL64(aNonceByteA, 58U)) ^ RotL64(aNonceByteB, 43U));
-            aCross = aCross ^ (RotL64(aKeyBoxUnrolledA[(((4095U - aIndex) + 15518U)) & (S_KEY_A - 1)], 13U) ^ RotL64(aKeyBoxUnrolledB[(((4095U - aIndex) + 13569U)) & (S_KEY_B - 1)], 5U));
+            aCross = aCross ^ (RotL64(aKeyBoxUnrolledA[(((4095U - aIndex) + 15518U)) & (S_KEY - 1)], 13U) ^ RotL64(aKeyBoxUnrolledB[(((4095U - aIndex) + 13569U)) & (S_KEY - 1)], 5U));
             aCross = TwistMix64::DiffuseC((aCross ^ aPhaseADomainWordCross));
             //
             aScatter = (RotL64(aCarry, 52U) ^ RotL64(aIngress, 23U)) + (RotL64(aPrevious, 39U) + RotL64(aCross, 3U));
@@ -3194,7 +3194,7 @@ void Candidate_A::Seed(TwistWorkSpace *pWorkSpace,
             //
             aCross = 0U;
             aCross = aCross ^ (RotL64(aNonceByteB, 5U) ^ RotL64(aNonceByteA, 50U));
-            aCross = aCross ^ (RotL64(aKeyBoxUnrolledA[(((4095U - aIndex) + 19642U)) & (S_KEY_A - 1)], 41U) ^ RotL64(aKeyBoxUnrolledB[(((4095U - aIndex) + 20472U)) & (S_KEY_B - 1)], 21U));
+            aCross = aCross ^ (RotL64(aKeyBoxUnrolledA[(((4095U - aIndex) + 19642U)) & (S_KEY - 1)], 41U) ^ RotL64(aKeyBoxUnrolledB[(((4095U - aIndex) + 20472U)) & (S_KEY - 1)], 21U));
             aCross = TwistMix64::DiffuseB((aCross ^ aPhaseADomainWordCross));
             //
             aScatter = (RotL64(aCarry, 41U) ^ RotL64(aPrevious, 23U)) + (RotL64(aIngress, 60U) + RotL64(aCross, 11U));
@@ -4734,11 +4734,11 @@ void Candidate_A::TwistBlock(TwistWorkSpace *pWorkSpace,
             aPrevious = aIngress;
             //
             aIngress = 0U;
-            aIngress = aIngress ^ (RotL64(mSource[((aIndex + 424U)) & S_BLOCK1], 4U) ^ RotL64(aKeyBoxUnrolledA[(((4095U - aIndex) + 3683U)) & (S_KEY_A - 1)], 29U));
+            aIngress = aIngress ^ (RotL64(mSource[((aIndex + 424U)) & S_BLOCK1], 4U) ^ RotL64(aKeyBoxUnrolledA[(((4095U - aIndex) + 3683U)) & (S_KEY - 1)], 29U));
             aIngress = TwistMix64::DiffuseC(aIngress);
             //
             aCross = 0U;
-            aCross = aCross ^ (RotL64(aKeyBoxUnrolledB[(((4095U - aIndex) + 6502U)) & (S_KEY_B - 1)], 54U) ^ RotL64(aKeyBoxUnrolledA[((aIndex + 5698U)) & (S_KEY_A - 1)], 19U));
+            aCross = aCross ^ (RotL64(aKeyBoxUnrolledB[(((4095U - aIndex) + 6502U)) & (S_KEY - 1)], 54U) ^ RotL64(aKeyBoxUnrolledA[((aIndex + 5698U)) & (S_KEY - 1)], 19U));
             aCross = TwistMix64::DiffuseB(aCross);
             //
             aScatter = (RotL64(aIngress, 53U) ^ RotL64(aCarry, 11U)) + (RotL64(aCross, 38U) ^ RotL64(aPrevious, 23U));
@@ -4802,7 +4802,7 @@ void Candidate_A::TwistBlock(TwistWorkSpace *pWorkSpace,
             aIngress = TwistMix64::DiffuseA(aIngress);
             //
             aCross = 0U;
-            aCross = aCross ^ (RotL64(aKeyBoxUnrolledA[(((4095U - aIndex) + 8822U)) & (S_KEY_A - 1)], 57U) ^ RotL64(aKeyBoxUnrolledB[(((4095U - aIndex) + 15288U)) & (S_KEY_B - 1)], 30U));
+            aCross = aCross ^ (RotL64(aKeyBoxUnrolledA[(((4095U - aIndex) + 8822U)) & (S_KEY - 1)], 57U) ^ RotL64(aKeyBoxUnrolledB[(((4095U - aIndex) + 15288U)) & (S_KEY - 1)], 30U));
             aCross = TwistMix64::DiffuseA(aCross);
             //
             aScatter = (RotL64(aIngress, 41U) + RotL64(aCross, 23U)) + (RotL64(aPrevious, 56U) ^ RotL64(aCarry, 11U));
@@ -4866,7 +4866,7 @@ void Candidate_A::TwistBlock(TwistWorkSpace *pWorkSpace,
             aIngress = TwistMix64::DiffuseC(aIngress);
             //
             aCross = 0U;
-            aCross = aCross ^ (RotL64(aKeyBoxUnrolledA[(((4095U - aIndex) + 17828U)) & (S_KEY_A - 1)], 3U) ^ RotL64(aKeyBoxUnrolledB[((aIndex + 19785U)) & (S_KEY_B - 1)], 56U));
+            aCross = aCross ^ (RotL64(aKeyBoxUnrolledA[(((4095U - aIndex) + 17828U)) & (S_KEY - 1)], 3U) ^ RotL64(aKeyBoxUnrolledB[((aIndex + 19785U)) & (S_KEY - 1)], 56U));
             aCross = TwistMix64::DiffuseB(aCross);
             //
             aScatter = (RotL64(aCross, 3U) + RotL64(aIngress, 35U)) + (RotL64(aPrevious, 21U) ^ RotL64(aCarry, 50U));
@@ -6049,12 +6049,12 @@ void Candidate_A::TwistBlock(TwistWorkSpace *pWorkSpace,
         }
     }
     std::memcpy(pDestination, pWorkSpace->mWorkLaneD, S_BLOCK);
-    if ((pBlockCount - pBlockIndex) > static_cast<std::size_t>(H_KEY_A)) {
+    if ((pBlockCount - pBlockIndex) > static_cast<std::size_t>(H_KEY)) {
         GrowKeyA(pWorkSpace);
     } else {
         TwistShiftBox::ShiftKeyBoxA(pWorkSpace);
     }
-    if ((pBlockCount - pBlockIndex) > static_cast<std::size_t>(H_KEY_B)) {
+    if ((pBlockCount - pBlockIndex) > static_cast<std::size_t>(H_KEY)) {
         printf("key b GROW [%d of %d]\n", (int)pBlockIndex, (int)pBlockCount);
         GrowKeyB(pWorkSpace);
     } else {
@@ -6299,7 +6299,7 @@ void Candidate_A::GrowKeyA(TwistWorkSpace *pWorkSpace) {
             aCarry = aCarry + RotL64(aIngress, 43U);
             aCarry = TwistMix64::DiffuseA(aCarry);
             //
-            aKeyRowWriteA[(aIndex) & W_KEY_A1] ^= aIngress;
+            aKeyRowWriteA[(aIndex) & W_KEY1] ^= aIngress;
         }
     }
     // GTwistRunGrowKeyA twist_key_box_loop_a (end)
@@ -6540,7 +6540,7 @@ void Candidate_A::GrowKeyB(TwistWorkSpace *pWorkSpace) {
             aCarry = aCarry + RotL64(aIngress, 13U);
             aCarry = TwistMix64::DiffuseA(aCarry);
             //
-            aKeyRowWriteB[(aIndex) & (W_KEY_B - 1)] ^= aIngress;
+            aKeyRowWriteB[(aIndex) & W_KEY1] ^= aIngress;
         }
     }
     // GTwistRunGrowKeyB twist_key_box_loop_b (end)

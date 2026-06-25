@@ -27,7 +27,7 @@ std::vector<TwistWorkSpaceSlot> PhaseSalts(const TwistDomain pDomain,
                                            const int pLaneCount) {
     const int aBase = static_cast<int>(pBaseSlot);
     const int aOffset = PhaseIndex(pDomain) * 18;
-
+    
     std::vector<TwistWorkSpaceSlot> aResult;
     aResult.reserve(static_cast<std::size_t>(pLaneCount));
     for (int i = 0; i < pLaneCount; ++i) {
@@ -42,7 +42,7 @@ GSeedRunStageConfig BaseConfig(const std::string &pStageName,
                                const GAXSFormat pFormat,
                                std::vector<int> pLaneCounts) {
     using Slot = TwistWorkSpaceSlot;
-
+    
     GSeedRunStageConfig aConfig;
     aConfig.mStageName = pStageName;
     aConfig.mBatchName = pLoopName;
@@ -62,46 +62,46 @@ GSeedRunStageConfig BaseConfig(const std::string &pStageName,
 
 GSeedRunStageConfig MakeTwist_AConfig() {
     using Slot = TwistWorkSpaceSlot;
-
+    
     GSeedRunStageConfig aConfig = BaseConfig("GTwistRunTwist_A",
                                              "twist_loop_a",
                                              TwistDomain::kPhaseA,
-                                             GAXSFormat::kN5,
+                                             GAXSFormat::kN9,
                                              {3, 4, 4, 4});
     aConfig.mSlices = {
         {{Slot::kSource,
-          Slot::kKeyBoxUnrolledA,
-          Slot::kKeyBoxUnrolledB},
-         Slot::kExpansionLaneA,
-         false},
-
+            Slot::kKeyRowReadA,
+            Slot::kKeyRowReadB},
+            Slot::kExpansionLaneA,
+            false},
+        
         {{Slot::kExpansionLaneA,
-          Slot::kSource,
-          Slot::kKeyBoxUnrolledA,
-          Slot::kKeyBoxUnrolledB},
-         Slot::kExpansionLaneB,
-         true},
-
+            Slot::kSource,
+            Slot::kKeyRowReadA,
+            Slot::kKeyRowReadB},
+            Slot::kExpansionLaneB,
+            true},
+        
         {{Slot::kExpansionLaneB,
-          Slot::kExpansionLaneA,
-          Slot::kKeyBoxUnrolledA,
-          Slot::kKeyBoxUnrolledB},
-         Slot::kExpansionLaneC,
-         false},
-
+            Slot::kExpansionLaneA,
+            Slot::kKeyRowReadA,
+            Slot::kKeyRowReadB},
+            Slot::kExpansionLaneC,
+            false},
+        
         {{Slot::kExpansionLaneC,
-          Slot::kExpansionLaneB,
-          Slot::kExpansionLaneA,
-          Slot::kSource},
-         Slot::kExpansionLaneD,
-         true},
+            Slot::kExpansionLaneB,
+            Slot::kExpansionLaneA,
+            Slot::kSource},
+            Slot::kExpansionLaneD,
+            true},
     };
     return aConfig;
 }
 
 GSeedRunStageConfig MakeTwist_BConfig() {
     using Slot = TwistWorkSpaceSlot;
-
+    
     GSeedRunStageConfig aConfig = BaseConfig("GTwistRunTwist_B",
                                              "twist_loop_b",
                                              TwistDomain::kPhaseB,
@@ -109,42 +109,40 @@ GSeedRunStageConfig MakeTwist_BConfig() {
                                              {4, 4, 4, 4});
     aConfig.mSlices = {
         {{Slot::kExpansionLaneD,
-          Slot::kExpansionLaneC,
-          Slot::kExpansionLaneB,
-          Slot::kExpansionLaneA},
-         Slot::kOperationLaneA,
-         false},
-
+            Slot::kExpansionLaneC,
+            Slot::kExpansionLaneB,
+            Slot::kExpansionLaneA},
+            Slot::kOperationLaneA,
+            false},
+        
         {{Slot::kOperationLaneA,
-          Slot::kExpansionLaneD,
-          Slot::kExpansionLaneC,
-          Slot::kExpansionLaneB,
-          Slot::kSource,
-          Slot::kKeyBoxUnrolledA,
-          Slot::kKeyBoxUnrolledB},
-         Slot::kOperationLaneB,
-         true},
-
+            Slot::kExpansionLaneD,
+            Slot::kExpansionLaneC,
+            Slot::kExpansionLaneB},
+            Slot::kOperationLaneB,
+            true},
+        
         {{Slot::kOperationLaneB,
-          Slot::kOperationLaneA,
-          Slot::kExpansionLaneD,
-          Slot::kExpansionLaneC},
-         Slot::kOperationLaneC,
-         false},
-
+            Slot::kOperationLaneA,
+            Slot::kExpansionLaneD,
+            Slot::kExpansionLaneC},
+            Slot::kOperationLaneC,
+            false},
+        
         {{Slot::kOperationLaneC,
-          Slot::kOperationLaneB,
-          Slot::kOperationLaneA,
-          Slot::kExpansionLaneD},
-         Slot::kOperationLaneD,
-         true},
+            Slot::kOperationLaneB,
+            Slot::kOperationLaneA,
+            Slot::kExpansionLaneD},
+            Slot::kOperationLaneD,
+            true},
+        
     };
     return aConfig;
 }
 
 GSeedRunStageConfig MakeTwist_CConfig() {
     using Slot = TwistWorkSpaceSlot;
-
+    
     GSeedRunStageConfig aConfig = BaseConfig("GTwistRunTwist_C",
                                              "twist_loop_c",
                                              TwistDomain::kPhaseC,
@@ -152,83 +150,78 @@ GSeedRunStageConfig MakeTwist_CConfig() {
                                              {4, 4, 4, 4});
     aConfig.mSlices = {
         {{Slot::kOperationLaneD,
-          Slot::kOperationLaneC,
-          Slot::kOperationLaneB,
-          Slot::kOperationLaneA},
-         Slot::kWorkLaneA,
-         true},
-
+            Slot::kOperationLaneC,
+            Slot::kOperationLaneB,
+            Slot::kOperationLaneA},
+            Slot::kWorkLaneA,
+            false},
+        
         {{Slot::kWorkLaneA,
-          Slot::kOperationLaneD,
-          Slot::kOperationLaneC,
-          Slot::kOperationLaneB,
-          Slot::kSource,
-          Slot::kKeyBoxUnrolledA,
-          Slot::kKeyBoxUnrolledB},
-         Slot::kWorkLaneB,
-         false},
-
+            Slot::kOperationLaneD,
+            Slot::kOperationLaneC,
+            Slot::kOperationLaneB},
+            Slot::kWorkLaneB,
+            true},
+        
         {{Slot::kWorkLaneB,
-          Slot::kWorkLaneA,
-          Slot::kOperationLaneD,
-          Slot::kOperationLaneC},
-         Slot::kWorkLaneC,
-         true},
-
+            Slot::kWorkLaneA,
+            Slot::kOperationLaneD,
+            Slot::kOperationLaneC},
+            Slot::kWorkLaneC,
+            false},
+        
         {{Slot::kWorkLaneC,
-          Slot::kWorkLaneB,
-          Slot::kWorkLaneA,
-          Slot::kOperationLaneD},
-         Slot::kWorkLaneD,
-         false},
+            Slot::kWorkLaneB,
+            Slot::kWorkLaneA,
+            Slot::kOperationLaneD},
+            Slot::kWorkLaneD,
+            true},
     };
     return aConfig;
 }
 
 GSeedRunStageConfig MakeTwist_DConfig() {
     using Slot = TwistWorkSpaceSlot;
-
+    
     GSeedRunStageConfig aConfig = BaseConfig("GTwistRunTwist_D",
                                              "twist_loop_d",
-                                             TwistDomain::kPhaseB,
-                                             GAXSFormat::kN7,
+                                             TwistDomain::kPhaseD,
+                                             GAXSFormat::kN5,
                                              {4, 4, 4, 4});
     aConfig.mSlices = {
         {{Slot::kExpansionLaneD,
-          Slot::kExpansionLaneC,
-          Slot::kExpansionLaneB,
-          Slot::kExpansionLaneA},
-         Slot::kWorkLaneA,
-         false},
-
+            Slot::kExpansionLaneC,
+            Slot::kExpansionLaneB,
+            Slot::kExpansionLaneA},
+            Slot::kWorkLaneA,
+            false},
+        
         {{Slot::kWorkLaneA,
-          Slot::kExpansionLaneD,
-          Slot::kExpansionLaneC,
-          Slot::kExpansionLaneB,
-          Slot::kSource,
-          Slot::kKeyBoxUnrolledA,
-          Slot::kKeyBoxUnrolledB},
-         Slot::kWorkLaneB,
-         true},
-
+            Slot::kExpansionLaneD,
+            Slot::kExpansionLaneC,
+            Slot::kExpansionLaneB},
+            Slot::kWorkLaneB,
+            true},
+        
         {{Slot::kWorkLaneB,
-          Slot::kWorkLaneA,
-          Slot::kExpansionLaneD,
-          Slot::kExpansionLaneC},
-         Slot::kWorkLaneC,
-         false},
-
+            Slot::kWorkLaneA,
+            Slot::kExpansionLaneD,
+            Slot::kExpansionLaneC},
+            Slot::kWorkLaneC,
+            false},
+        
         {{Slot::kWorkLaneC,
-          Slot::kWorkLaneB,
-          Slot::kWorkLaneA,
-          Slot::kExpansionLaneD},
-         Slot::kWorkLaneD,
-         true},
+            Slot::kWorkLaneB,
+            Slot::kWorkLaneA,
+            Slot::kExpansionLaneD},
+            Slot::kWorkLaneD,
+            true},
     };
     return aConfig;
 }
 
 } // namespace
+
 
 GTwistRunTwist_A::GTwistRunTwist_A()
 : mStage(MakeTwist_AConfig()) {

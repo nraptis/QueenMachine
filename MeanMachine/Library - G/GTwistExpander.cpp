@@ -1933,6 +1933,23 @@ bool ApplyBranchStringLine(const std::string &pRawLine,
         return true;
     }
 
+    std::string aHookLine = pRawLine;
+    const std::size_t aHookComment = aHookLine.find("//");
+    if (aHookComment != std::string::npos) {
+        aHookLine = aHookLine.substr(0U, aHookComment);
+    }
+    aHookLine = TrimCopy(aHookLine);
+    if (!aHookLine.empty() && aHookLine.back() == ';') {
+        aHookLine.pop_back();
+        aHookLine = TrimCopy(aHookLine);
+    }
+    if (aHookLine == "SquashInvestToKeyBoxes()") {
+        if (pExpander != nullptr) {
+            pExpander->SquashInvestToKeyBoxes();
+        }
+        return true;
+    }
+
     std::string aRuntimeRawLine = pRawLine;
     const std::size_t aRuntimeComment = aRuntimeRawLine.find("//");
     if (aRuntimeComment != std::string::npos) {
@@ -2200,6 +2217,10 @@ void GTwistExpander::TwistBlock(TwistWorkSpace *pWorkSpace,
                               pBlockIndex,
                               pBlockCount,
                               pDestination);
+}
+
+void GTwistExpander::SquashInvestToKeyBoxes() {
+    TwistExpander::SquashInvestToKeyBoxes();
 }
 
 void GTwistExpander::GrowKeyA(TwistWorkSpace *pWorkSpace) {

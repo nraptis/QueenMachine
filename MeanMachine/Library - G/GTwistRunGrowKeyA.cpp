@@ -190,7 +190,7 @@ bool AddShiftAndZero(TwistProgramBranch &pBranch,
     if (!aMemory.BakeZero(GSymbol::Buf(pUseKeyBoxA ?
                                        TwistWorkSpaceSlot::kKeyRowWriteA :
                                        TwistWorkSpaceSlot::kKeyRowWriteB),
-                          pUseKeyBoxA ? W_KEY_A : W_KEY_B,
+                          W_KEY,
                           &aStatements,
                           pErrorMessage)) {
         return false;

@@ -122,6 +122,13 @@ public:
         std::vector<CSPRNGV2Slice> aSlices;
         for (std::size_t aIndex = 0; aIndex < mConfig.mSlices.size(); ++aIndex) {
             const GSeedRunStageSliceSpec &aSpec = mConfig.mSlices[aIndex];
+            if (aSpec.mSources.size() > 4U) {
+                SetError(pErrorMessage,
+                         mConfig.mStageName + " " + mConfig.mBatchName +
+                         " slice " + std::to_string(aIndex + 1U) +
+                         " had more than 4 input lanes");
+                return false;
+            }
 
             CSPRNGV2Slice aSlice = {};
             aSlice.mARXSkeleton = mARXSkeletons[aIndex];

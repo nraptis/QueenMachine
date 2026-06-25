@@ -253,8 +253,8 @@ private:
     }
     
     static void FillWorkSpace(TwistWorkSpace *pWorkSpace) {
-        FillBytes(&pWorkSpace->mKeyBoxA[0][0], S_KEY_A);
-        FillBytes(&pWorkSpace->mKeyBoxB[0][0], S_KEY_B);
+        FillBytes(&pWorkSpace->mKeyBoxA[0][0], S_KEY);
+        FillBytes(&pWorkSpace->mKeyBoxB[0][0], S_KEY);
         
         FillBytes(pWorkSpace->mExpansionLaneA, S_BLOCK);
         FillBytes(pWorkSpace->mExpansionLaneB, S_BLOCK);

@@ -21,7 +21,7 @@ void TwistInvest::InvestBlockKeyBoxA(std::uint8_t *pSource,
         aKeyBoxUnrolledA[aKeyIndex] += pSource[aSourceIndex];
         aSourceIndex++;
         aKeyIndex++;
-        if (aKeyIndex == S_KEY_A) {
+        if (aKeyIndex == S_KEY) {
             aKeyIndex = 0;
         }
     }
@@ -41,7 +41,7 @@ void TwistInvest::InvestBlockKeyBoxB(std::uint8_t *pSource,
         aKeyBoxUnrolledB[aKeyIndex] += pSource[aSourceIndex];
         aSourceIndex++;
         aKeyIndex++;
-        if (aKeyIndex == S_KEY_B) {
+        if (aKeyIndex == S_KEY) {
             aKeyIndex = 0;
         }
     }

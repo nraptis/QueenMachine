@@ -69,14 +69,14 @@ std::string NonceDeclareLine(const GSymbol &pNonceSymbol,
     const std::uint64_t aMultiplyWord = Random::Get64HighOdd();
     const std::uint64_t aAddWord = Random::Get64High();
     const char *aDiffuseName = RandomNonceDiffuseName();
-
+    
     std::ostringstream aLine;
     aLine << "std::uint64_t " << pNonceSymbol.mName << " = TwistMix64::"
-          << aDiffuseName
-          << "(pNonce * "
-          << UInt64Literal(aMultiplyWord)
-          << " + "
-          << UInt64Literal(aAddWord) << ");";
+    << aDiffuseName
+    << "(pNonce * "
+    << UInt64Literal(aMultiplyWord)
+    << " + "
+    << UInt64Literal(aAddWord) << ");";
     return aLine.str();
 }
 
@@ -91,7 +91,7 @@ std::vector<TwistWorkSpaceSlot> PhaseSalts(const TwistDomain pDomain,
                                            const int pLaneCount) {
     const int aBase = static_cast<int>(pBaseSlot);
     const int aOffset = PhaseIndex(pDomain) * 18;
-
+    
     std::vector<TwistWorkSpaceSlot> aResult;
     aResult.reserve(static_cast<std::size_t>(pLaneCount));
     for (int i = 0; i < pLaneCount; ++i) {
@@ -106,9 +106,9 @@ GSeedRunStageConfig BaseConfig(const std::string &pStageName,
                                const GAXSFormat pFormat,
                                std::vector<int> pLaneCounts) {
     using Slot = TwistWorkSpaceSlot;
-
+    
     const std::string aLoopName = SeedLoopName(pDomain);
-
+    
     GSeedRunStageConfig aConfig;
     aConfig.mStageName = pStageName;
     aConfig.mBatchName = aLoopName;
@@ -132,87 +132,123 @@ GSeedRunStageConfig BaseConfig(const std::string &pStageName,
 
 GSeedRunStageConfig MakeSeed_AConfig(const bool pUseNonces) {
     using Slot = TwistWorkSpaceSlot;
-
+    
     GSeedRunStageConfig aConfig = BaseConfig("GSeedRunSeed_A",
                                              TwistDomain::kPhaseA,
                                              pUseNonces,
                                              GAXSFormat::kN7,
-                                             {3, 4, 4, 4});
+                                             {3, 4, 4, 4, 4, 4});
+    
+    // source key_a, key_b => work_a
+    // work_a, source key_a, key_b => work_b
+    
+    
     aConfig.mSlices = {
+        
         {{Slot::kSource,
-          Slot::kKeyBoxUnrolledA,
-          Slot::kKeyBoxUnrolledB},
-         Slot::kExpansionLaneA,
-         false},
-
+            Slot::kKeyRowReadA,
+            Slot::kKeyRowReadB},
+            Slot::kWorkLaneA,
+            false},
+        
+        {{Slot::kWorkLaneA,
+            Slot::kSource,
+            Slot::kKeyRowReadA,
+            Slot::kKeyRowReadB},
+            Slot::kWorkLaneB,
+            true},
+        
+        {{Slot::kWorkLaneB,
+            Slot::kWorkLaneA,
+            Slot::kKeyRowReadA,
+            Slot::kKeyRowReadB},
+            Slot::kExpansionLaneA,
+            false},
+        
         {{Slot::kExpansionLaneA,
-          Slot::kSource,
-          Slot::kKeyBoxUnrolledA,
-          Slot::kKeyBoxUnrolledB},
-         Slot::kExpansionLaneB,
-         true},
-
+            Slot::kWorkLaneB,
+            Slot::kWorkLaneA,
+            Slot::kSource},
+            Slot::kExpansionLaneB,
+            true},
+        
         {{Slot::kExpansionLaneB,
-          Slot::kExpansionLaneA,
-          Slot::kKeyBoxUnrolledA,
-          Slot::kKeyBoxUnrolledB},
-         Slot::kExpansionLaneC,
-         false},
-
+            Slot::kExpansionLaneA,
+            Slot::kWorkLaneB,
+            Slot::kWorkLaneA},
+            Slot::kExpansionLaneC,
+            false},
+        
         {{Slot::kExpansionLaneC,
-          Slot::kExpansionLaneB,
-          Slot::kExpansionLaneA,
-          Slot::kSource},
-         Slot::kExpansionLaneD,
-         true},
+            Slot::kExpansionLaneB,
+            Slot::kExpansionLaneA,
+            Slot::kWorkLaneB},
+            Slot::kExpansionLaneD,
+            true},
+        
     };
     return aConfig;
 }
 
 GSeedRunStageConfig MakeSeed_BConfig(const bool pUseNonces) {
     using Slot = TwistWorkSpaceSlot;
-
+    
     GSeedRunStageConfig aConfig = BaseConfig("GSeedRunSeed_B",
                                              TwistDomain::kPhaseB,
                                              pUseNonces,
-                                             GAXSFormat::kN11,
-                                             {4, 4, 4, 4});
+                                             GAXSFormat::kN5,
+                                             {4, 4, 4, 4, 4, 4});
     
     aConfig.mSlices = {
         {{Slot::kExpansionLaneD,
-          Slot::kExpansionLaneC,
-          Slot::kExpansionLaneB,
-          Slot::kExpansionLaneA},
-         Slot::kOperationLaneA,
-         false},
-
+            Slot::kExpansionLaneC,
+            Slot::kExpansionLaneB,
+            Slot::kExpansionLaneA},
+            Slot::kWorkLaneA,
+            false},
+        
+        {{Slot::kWorkLaneA,
+            Slot::kExpansionLaneD,
+            Slot::kExpansionLaneC,
+            Slot::kExpansionLaneB},
+            Slot::kWorkLaneB,
+            true},
+        
+        
+        {{Slot::kWorkLaneB,
+            Slot::kWorkLaneA,
+            Slot::kExpansionLaneD,
+            Slot::kExpansionLaneC},
+            Slot::kOperationLaneA,
+            false},
+        
         {{Slot::kOperationLaneA,
-          Slot::kExpansionLaneD,
-          Slot::kExpansionLaneC,
-          Slot::kExpansionLaneB},
-         Slot::kOperationLaneB,
-         true},
-
+            Slot::kWorkLaneB,
+            Slot::kWorkLaneA,
+            Slot::kExpansionLaneD},
+            Slot::kOperationLaneB,
+            true},
+        
         {{Slot::kOperationLaneB,
-          Slot::kOperationLaneA,
-          Slot::kExpansionLaneD,
-          Slot::kExpansionLaneC},
-         Slot::kOperationLaneC,
-         false},
-
+            Slot::kOperationLaneA,
+            Slot::kWorkLaneB,
+            Slot::kWorkLaneA},
+            Slot::kOperationLaneC,
+            false},
+        
         {{Slot::kOperationLaneC,
-          Slot::kOperationLaneB,
-          Slot::kOperationLaneA,
-          Slot::kExpansionLaneD},
-         Slot::kOperationLaneD,
-         true},
+            Slot::kOperationLaneB,
+            Slot::kOperationLaneA,
+            Slot::kWorkLaneB},
+            Slot::kOperationLaneD,
+            true},
     };
     return aConfig;
 }
 
 GSeedRunStageConfig MakeSeed_CConfig(const bool pUseNonces) {
     using Slot = TwistWorkSpaceSlot;
-
+    
     GSeedRunStageConfig aConfig = BaseConfig("GSeedRunSeed_C",
                                              TwistDomain::kPhaseC,
                                              pUseNonces,
@@ -221,72 +257,91 @@ GSeedRunStageConfig MakeSeed_CConfig(const bool pUseNonces) {
     
     aConfig.mSlices = {
         {{Slot::kOperationLaneD,
-          Slot::kOperationLaneC,
-          Slot::kOperationLaneB,
-          Slot::kOperationLaneA},
-         Slot::kWorkLaneA,
-         true},
-
+            Slot::kOperationLaneC,
+            Slot::kOperationLaneB,
+            Slot::kOperationLaneA},
+            Slot::kWorkLaneA,
+            false},
+        
         {{Slot::kWorkLaneA,
-          Slot::kOperationLaneD,
-          Slot::kOperationLaneC,
-          Slot::kOperationLaneB},
-         Slot::kWorkLaneB,
-         false},
-
+            Slot::kOperationLaneD,
+            Slot::kOperationLaneC,
+            Slot::kOperationLaneB},
+            Slot::kWorkLaneB,
+            true},
+        
         {{Slot::kWorkLaneB,
-          Slot::kWorkLaneA,
-          Slot::kOperationLaneD,
-          Slot::kOperationLaneC},
-         Slot::kWorkLaneC,
-         true},
-
+            Slot::kWorkLaneA,
+            Slot::kOperationLaneD,
+            Slot::kOperationLaneC},
+            Slot::kWorkLaneC,
+            false},
+        
         {{Slot::kWorkLaneC,
-          Slot::kWorkLaneB,
-          Slot::kWorkLaneA,
-          Slot::kOperationLaneD},
-         Slot::kWorkLaneD,
-         false},
+            Slot::kWorkLaneB,
+            Slot::kWorkLaneA,
+            Slot::kOperationLaneD},
+            Slot::kWorkLaneD,
+            true},
     };
     return aConfig;
 }
 
 GSeedRunStageConfig MakeSeed_DConfig(const bool pUseNonces) {
     using Slot = TwistWorkSpaceSlot;
-
+    
     GSeedRunStageConfig aConfig = BaseConfig("GSeedRunSeed_D",
                                              TwistDomain::kPhaseD,
                                              pUseNonces,
-                                             GAXSFormat::kN7,
-                                             {4, 4, 4, 4});
+                                             GAXSFormat::kN11,
+                                             {4, 4, 4, 4, 4, 4});
     aConfig.mSlices = {
         {{Slot::kExpansionLaneD,
-          Slot::kExpansionLaneC,
-          Slot::kExpansionLaneB,
-          Slot::kExpansionLaneA},
-         Slot::kWorkLaneA,
-         false},
+            Slot::kExpansionLaneC,
+            Slot::kExpansionLaneB,
+            Slot::kExpansionLaneA},
+            Slot::kOperationLaneA,
+            false},
+        
+        
+        {{Slot::kOperationLaneA,
+            Slot::kExpansionLaneD,
+            Slot::kExpansionLaneC,
+            Slot::kExpansionLaneB},
+            Slot::kOperationLaneB,
+            true},
+        
+        
+        {{Slot::kOperationLaneB,
+            Slot::kOperationLaneA,
+            Slot::kExpansionLaneD,
+            Slot::kExpansionLaneC},
+            Slot::kWorkLaneA,
+            false},
+        
         
         {{Slot::kWorkLaneA,
-          Slot::kExpansionLaneD,
-          Slot::kExpansionLaneC,
-          Slot::kExpansionLaneB},
-         Slot::kWorkLaneB,
-         true},
+            Slot::kOperationLaneB,
+            Slot::kOperationLaneA,
+            Slot::kExpansionLaneD},
+            Slot::kWorkLaneB,
+            true},
+        
         
         {{Slot::kWorkLaneB,
-          Slot::kWorkLaneA,
-          Slot::kExpansionLaneD,
-          Slot::kExpansionLaneC},
-         Slot::kWorkLaneC,
-         false},
+            Slot::kWorkLaneA,
+            Slot::kOperationLaneB,
+            Slot::kOperationLaneA},
+            Slot::kWorkLaneC,
+            false},
+        
         
         {{Slot::kWorkLaneC,
-          Slot::kWorkLaneB,
-          Slot::kWorkLaneA,
-          Slot::kExpansionLaneD},
-         Slot::kWorkLaneD,
-         true},
+            Slot::kWorkLaneB,
+            Slot::kWorkLaneA,
+            Slot::kOperationLaneB},
+            Slot::kWorkLaneD,
+            true},
     };
     return aConfig;
 }

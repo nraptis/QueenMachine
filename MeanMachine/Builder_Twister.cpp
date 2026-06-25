@@ -10,7 +10,6 @@
 #include "GTwistRunGrowKeyA.hpp"
 #include "GTwistRunTwist.hpp"
 
-#include "GMemory.hpp"
 #include "GSquash.hpp"
 
 #include "GRunMatrixDiffusion.hpp"
@@ -96,30 +95,6 @@ bool Builder_Twister::Build(GTwistExpander *pExpander,
         pExpander->mTwister.AddLine(aStatement.mRawLine);
     }
     
-    {
-        std::vector<GStatement> aZeroStatements;
-        GMemory aMemory;
-        if (!aMemory.BakeZero(aExpansionLanes[0], &aZeroStatements, pErrorMessage)) {
-            return false;
-        }
-        if (!aMemory.BakeZero(aExpansionLanes[1], &aZeroStatements, pErrorMessage)) {
-            return false;
-        }
-        if (!aMemory.BakeZero(aExpansionLanes[2], &aZeroStatements, pErrorMessage)) {
-            return false;
-        }
-        if (!aMemory.BakeZero(aExpansionLanes[3], &aZeroStatements, pErrorMessage)) {
-            return false;
-        }
-        pExpander->mTwister.AddLine("// secure zero");
-        for (const GStatement &aStatement : aZeroStatements) {
-            pExpander->mTwister.AddLine(aStatement.mRawLine);
-        }
-        pExpander->mTwister.AddLine("//");
-    }
-    
-    
-    
     std::vector<GStatement> aStatementsSeed8;
     GTwistRunTwist_C aRunnerTwistC;
     
@@ -170,43 +145,6 @@ bool Builder_Twister::Build(GTwistExpander *pExpander,
         pExpander->mTwister.AddBatch(aBatchDiffusion);
     }
     
-    {
-        std::vector<GStatement> aZeroStatements;
-        GMemory aMemory;
-        if (!aMemory.BakeZero(aOperationLanes[0], &aZeroStatements, pErrorMessage)) {
-            return false;
-        }
-        if (!aMemory.BakeZero(aOperationLanes[1], &aZeroStatements, pErrorMessage)) {
-            return false;
-        }
-        if (!aMemory.BakeZero(aOperationLanes[2], &aZeroStatements, pErrorMessage)) {
-            return false;
-        }
-        if (!aMemory.BakeZero(aOperationLanes[3], &aZeroStatements, pErrorMessage)) {
-            return false;
-        }
-        if (!aMemory.BakeZero(aWorkLanes[0], &aZeroStatements, pErrorMessage)) {
-            return false;
-        }
-        if (!aMemory.BakeZero(aWorkLanes[1], &aZeroStatements, pErrorMessage)) {
-            return false;
-        }
-        if (!aMemory.BakeZero(aWorkLanes[2], &aZeroStatements, pErrorMessage)) {
-            return false;
-        }
-        if (!aMemory.BakeZero(aWorkLanes[3], &aZeroStatements, pErrorMessage)) {
-            return false;
-        }
-        
-        pExpander->mTwister.AddLine("// secure zero");
-        for (const GStatement &aStatement : aZeroStatements) {
-            pExpander->mTwister.AddLine(aStatement.mRawLine);
-        }
-        pExpander->mTwister.AddLine("//");
-    }
-    
-    
-    
     std::vector<GStatement> aStatementsSeed9;
     GTwistRunTwist_D aRunnerTwistD;
     
@@ -231,32 +169,6 @@ bool Builder_Twister::Build(GTwistExpander *pExpander,
     }
     
     pExpander->mTwister.AddLine("//");
-    
-    
-    
-    {
-        std::vector<GStatement> aZeroStatements;
-        GMemory aMemory;
-        
-        if (!aMemory.BakeZero(aExpansionLanes[0], &aZeroStatements, pErrorMessage)) {
-            return false;
-        }
-        if (!aMemory.BakeZero(aExpansionLanes[1], &aZeroStatements, pErrorMessage)) {
-            return false;
-        }
-        if (!aMemory.BakeZero(aExpansionLanes[2], &aZeroStatements, pErrorMessage)) {
-            return false;
-        }
-        if (!aMemory.BakeZero(aExpansionLanes[3], &aZeroStatements, pErrorMessage)) {
-            return false;
-        }
-        pExpander->mTwister.AddLine("// secure zero");
-        for (const GStatement &aStatement : aZeroStatements) {
-            pExpander->mTwister.AddLine(aStatement.mRawLine);
-        }
-        pExpander->mTwister.AddLine("//");
-    }
-    
     std::vector<GStatement> aStatementsSquash;
     GSymbol aIndex = GSymbol::Var(TwistVariable::kIndex);
     GSquash aSquash;

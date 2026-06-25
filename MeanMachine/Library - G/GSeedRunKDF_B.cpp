@@ -73,7 +73,7 @@ GSeedRunStageConfig BaseConfig(const std::string &pStageName,
     aConfig.mEndLine = "// " + pStageName + " " + pBatchName + " (end)";
     aConfig.mFormat = pFormat;
     aConfig.mIgnoreNonces = false;
-    aConfig.mLaneCounts = {4, 4, 4, 4};
+    aConfig.mLaneCounts = {4, 4, 4, 4, 4, 4};
     aConfig.mHasDomainMix = true;
     aConfig.mDomain = TwistDomain::kInvalid;
     aConfig.mIsNonKDF = false;
@@ -92,15 +92,15 @@ void AddKDF_BPrologue(TwistProgramBranch &pBranch) {
     pBranch.AddLine("std::uint64_t aDomainWordIngress = pConstants->mIngress;");
     pBranch.AddLine("std::uint64_t aDomainWordScatter = pConstants->mScatter;");
     pBranch.AddLine("std::uint64_t aDomainWordCross = pConstants->mCross;");
-
+    
     GBatch aInitBatch;
     aInitBatch.mName = "init varz";
-
+    
     std::vector<GStatement> aInitStatements;
     for (TwistVariable aVariable : kInitialRandomVariables) {
         aInitStatements.push_back(
-            GQuick::MakeAssignVariableStatement(GSymbol::Var(aVariable),
-                                                GExpr::Const(Random::Get64High())));
+                                  GQuick::MakeAssignVariableStatement(GSymbol::Var(aVariable),
+                                                                      GExpr::Const(Random::Get64High())));
     }
     aInitBatch.CommitStatements(&aInitStatements);
     pBranch.AddBatch(aInitBatch);
@@ -113,20 +113,20 @@ GSeedRunStageConfig MakeKDF_B_AConfig() {
                                              GAXSFormat::kN7);
     aConfig.mSlices = {
         {{Slot::kWorkLaneD, Slot::kWorkLaneC, Slot::kWorkLaneB, Slot::kWorkLaneA},
-         Slot::kExpansionLaneA,
-         false},
-
+            Slot::kExpansionLaneA,
+            false},
+        
         {{Slot::kExpansionLaneA, Slot::kWorkLaneD, Slot::kWorkLaneC, Slot::kWorkLaneB},
-         Slot::kExpansionLaneB,
-         true},
-
+            Slot::kExpansionLaneB,
+            true},
+        
         {{Slot::kExpansionLaneB, Slot::kExpansionLaneA, Slot::kWorkLaneD, Slot::kWorkLaneC},
-         Slot::kExpansionLaneC,
-         false},
-
+            Slot::kExpansionLaneC,
+            false},
+        
         {{Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA, Slot::kWorkLaneD},
-         Slot::kExpansionLaneD,
-         true},
+            Slot::kExpansionLaneD,
+            true},
     };
     return aConfig;
 }
@@ -142,20 +142,20 @@ GSeedRunStageConfig MakeKDF_B_BConfig() {
     
     aConfig.mSlices = {
         {{Slot::kExpansionLaneD, Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA},
-         Slot::kOperationLaneA,
-         false},
-
+            Slot::kOperationLaneA,
+            false},
+        
         {{Slot::kOperationLaneA, Slot::kExpansionLaneD, Slot::kExpansionLaneC, Slot::kExpansionLaneB},
-         Slot::kOperationLaneB,
-         true},
-
+            Slot::kOperationLaneB,
+            true},
+        
         {{Slot::kOperationLaneB, Slot::kOperationLaneA, Slot::kExpansionLaneD, Slot::kExpansionLaneC},
-         Slot::kOperationLaneC,
-         false},
-
+            Slot::kOperationLaneC,
+            false},
+        
         {{Slot::kOperationLaneC, Slot::kOperationLaneB, Slot::kOperationLaneA, Slot::kExpansionLaneD},
-         Slot::kOperationLaneD,
-         true},
+            Slot::kOperationLaneD,
+            true},
     };
     return aConfig;
 }
@@ -171,28 +171,28 @@ GSeedRunStageConfig MakeKDF_B_CConfig() {
     aConfig.mSlices = {
         
         {{Slot::kOperationLaneD, Slot::kOperationLaneC, Slot::kOperationLaneB, Slot::kOperationLaneA},
-         Slot::kWorkLaneA,
-         false},
-
+            Slot::kWorkLaneA,
+            false},
+        
         {{Slot::kWorkLaneA, Slot::kOperationLaneD, Slot::kOperationLaneC, Slot::kOperationLaneB},
-         Slot::kWorkLaneB,
-         true},
+            Slot::kWorkLaneB,
+            true},
         
         {{Slot::kWorkLaneB, Slot::kWorkLaneA, Slot::kOperationLaneD, Slot::kOperationLaneC},
-         Slot::kExpansionLaneA,
-         false},
+            Slot::kExpansionLaneA,
+            false},
         
         {{Slot::kExpansionLaneA, Slot::kWorkLaneB, Slot::kWorkLaneA, Slot::kOperationLaneD},
             Slot::kExpansionLaneB,
-         false},
+            true},
         
         {{Slot::kExpansionLaneB, Slot::kExpansionLaneA, Slot::kWorkLaneB, Slot::kWorkLaneA},
             Slot::kExpansionLaneC,
-         false},
+            false},
         
         {{Slot::kExpansionLaneC, Slot::kExpansionLaneB, Slot::kExpansionLaneA, Slot::kWorkLaneB},
             Slot::kExpansionLaneD,
-         false},
+            true},
         
     };
     return aConfig;

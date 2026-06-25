@@ -40,11 +40,11 @@ public:
     }
     
     static void                 ZeroKeyBoxA(std::uint8_t *pSource) {
-        Zero(pSource, S_KEY_A);
+        Zero(pSource, S_KEY);
     }
 
     static void                 ZeroKeyBoxB(std::uint8_t *pSource) {
-        Zero(pSource, S_KEY_B);
+        Zero(pSource, S_KEY);
     }
     
     static void                 CopyBlock(std::uint8_t *pDest,

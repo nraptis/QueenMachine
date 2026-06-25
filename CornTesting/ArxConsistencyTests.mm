@@ -772,4 +772,110 @@
 }
 
 
+- (void)testTwist_C {
+    
+    ConsistencyTestsArxVariables aVarsOriginal = ConsistencyTestsShared::MakeArxVariables();
+    ConsistencyTestsArxVariables aVarsTrialA = aVarsOriginal.Clone();
+    ConsistencyTestsArxVariables aVarsTrialB = aVarsOriginal.Clone();
+    
+    auto aExpanderArx = ConsistencyTestsShared::ExpanderArx();
+    aExpanderArx.Twist_C(&aVarsTrialA.mWorkSpace,
+                             aVarsTrialA.mSource,
+                             &aVarsTrialA.mPrevious,
+                             &aVarsTrialA.mIngress,
+                             &aVarsTrialA.mCarry,
+                             &aVarsTrialA.mWandererA,
+                             &aVarsTrialA.mWandererB,
+                             &aVarsTrialA.mWandererC,
+                             &aVarsTrialA.mWandererD,
+                             &aVarsTrialA.mWandererE,
+                             &aVarsTrialA.mWandererF,
+                             &aVarsTrialA.mWandererG,
+                             &aVarsTrialA.mWandererH,
+                             &aVarsTrialA.mWandererI,
+                             &aVarsTrialA.mWandererJ,
+                             &aVarsTrialA.mWandererK);
+    
+    if (!ConsistencyTestsShared::EnsureWorkLanesAreNotEqual(&aVarsTrialA.mWorkSpace, &aVarsTrialB.mWorkSpace)) {
+        XCTFail("expected expansions lanes not equal, suspiciously they were equal");
+        return;
+    }
+    
+    aExpanderArx.Twist_C(&aVarsTrialB.mWorkSpace,
+                         aVarsTrialB.mSource,
+                         &aVarsTrialB.mPrevious,
+                         &aVarsTrialB.mIngress,
+                         &aVarsTrialB.mCarry,
+                         &aVarsTrialB.mWandererA,
+                         &aVarsTrialB.mWandererB,
+                         &aVarsTrialB.mWandererC,
+                         &aVarsTrialB.mWandererD,
+                         &aVarsTrialB.mWandererE,
+                         &aVarsTrialB.mWandererF,
+                         &aVarsTrialB.mWandererG,
+                         &aVarsTrialB.mWandererH,
+                         &aVarsTrialB.mWandererI,
+                         &aVarsTrialB.mWandererJ,
+                         &aVarsTrialB.mWandererK);
+    
+    if (!ConsistencyTestsShared::EnsureWorkLanesAreEqual(&aVarsTrialA.mWorkSpace, &aVarsTrialB.mWorkSpace)) {
+        XCTFail("expected expansions lanes equal, suspiciously they were not equal");
+        return;
+    }
+}
+
+- (void)testTwist_D {
+
+    ConsistencyTestsArxVariables aVarsOriginal = ConsistencyTestsShared::MakeArxVariables();
+    ConsistencyTestsArxVariables aVarsTrialA = aVarsOriginal.Clone();
+    ConsistencyTestsArxVariables aVarsTrialB = aVarsOriginal.Clone();
+    
+    auto aExpanderArx = ConsistencyTestsShared::ExpanderArx();
+    aExpanderArx.Twist_D(&aVarsTrialA.mWorkSpace,
+                             aVarsTrialA.mSource,
+                             &aVarsTrialA.mPrevious,
+                             &aVarsTrialA.mIngress,
+                             &aVarsTrialA.mCarry,
+                             &aVarsTrialA.mWandererA,
+                             &aVarsTrialA.mWandererB,
+                             &aVarsTrialA.mWandererC,
+                             &aVarsTrialA.mWandererD,
+                             &aVarsTrialA.mWandererE,
+                             &aVarsTrialA.mWandererF,
+                             &aVarsTrialA.mWandererG,
+                             &aVarsTrialA.mWandererH,
+                             &aVarsTrialA.mWandererI,
+                             &aVarsTrialA.mWandererJ,
+                             &aVarsTrialA.mWandererK);
+    
+    if (!ConsistencyTestsShared::EnsureWorkLanesAreNotEqual(&aVarsTrialA.mWorkSpace, &aVarsTrialB.mWorkSpace)) {
+        XCTFail("expected expansions lanes not equal, suspiciously they were equal");
+        return;
+    }
+    
+    aExpanderArx.Twist_D(&aVarsTrialB.mWorkSpace,
+                         aVarsTrialB.mSource,
+                         &aVarsTrialB.mPrevious,
+                         &aVarsTrialB.mIngress,
+                         &aVarsTrialB.mCarry,
+                         &aVarsTrialB.mWandererA,
+                         &aVarsTrialB.mWandererB,
+                         &aVarsTrialB.mWandererC,
+                         &aVarsTrialB.mWandererD,
+                         &aVarsTrialB.mWandererE,
+                         &aVarsTrialB.mWandererF,
+                         &aVarsTrialB.mWandererG,
+                         &aVarsTrialB.mWandererH,
+                         &aVarsTrialB.mWandererI,
+                         &aVarsTrialB.mWandererJ,
+                         &aVarsTrialB.mWandererK);
+    
+    if (!ConsistencyTestsShared::EnsureWorkLanesAreEqual(&aVarsTrialA.mWorkSpace, &aVarsTrialB.mWorkSpace)) {
+        XCTFail("expected expansions lanes equal, suspiciously they were not equal");
+        return;
+    }
+    
+}
+
+
 @end
